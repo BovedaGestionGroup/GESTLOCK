@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: gestor-web
+    env: node
+    plan: free
+    buildCommand: npm install && npm run build --workspace apps/web
+    startCommand: npm run start --workspace apps/web
+    envVars:
+      - key: NODE_ENV
+        value: production
+
+  - type: web
+    name: gestor-api
+    env: node
+    plan: free
+    buildCommand: npm install && npm run build --workspace apps/api
+    startCommand: npm run start --workspace apps/api
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        generateValue: true
