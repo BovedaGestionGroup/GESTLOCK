@@ -8,9 +8,5 @@
     "dev": "npm run dev --workspace apps/web",
     "dev:api": "npm run dev --workspace apps/api",
     "test": "npm run test --workspace apps/api"
-  },
-  "dependencies": {
-    "argon2": "^0.45.1",
-    "cookie-parser": "^1.4.7"
   }
 }
