@@ -528,8 +528,9 @@ app.delete('/vault/entries/:id', authMiddleware, async (req, res) => {
 });
 
 if (process.env.NODE_ENV !== 'test') {
-  app.listen(process.env.PORT ? Number(process.env.PORT) : 4000, () => {
-    console.log('API listening on port 4000');
+  const port = process.env.PORT ? Number(process.env.PORT) : 4000;
+  app.listen(port, () => {
+    console.log(`API listening on port ${port}`);
   });
 }
 

@@ -55,7 +55,7 @@ export const prisma = {
       const items = await prismaClient.vaultEntry.findMany({ where: resolvedWhere });
       const normalized = search?.trim().toLowerCase();
       if (!normalized) return items;
-      return items.filter((entry) => [entry.name, entry.url, entry.username, entry.notes ?? ''].some((value) => value.toLowerCase().includes(normalized)));
+      return items.filter((entry: any) => [entry.name, entry.url, entry.username, entry.notes ?? ''].some((value) => value.toLowerCase().includes(normalized)));
     },
     update: async ({ where, data }: { where: { id: string }; data: any }) => prismaClient.vaultEntry.update({ where, data }),
     delete: async ({ where }: { where: { id: string } }) => prismaClient.vaultEntry.delete({ where }),

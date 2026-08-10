@@ -3,20 +3,33 @@ services:
     name: gestor-web
     env: node
     plan: free
-    buildCommand: npm install && npm run build --workspace apps/web
+    rootDir: .
+    buildCommand: npm ci --include=dev && npm run build --workspace apps/web
     startCommand: npm run start --workspace apps/web
     envVars:
       - key: NODE_ENV
         value: production
+      - key: NEXT_PUBLIC_API_URL
+        value: https://gestor-api.onrender.com
 
   - type: web
     name: gestor-api
     env: node
     plan: free
-    buildCommand: npm install && npm run build --workspace apps/api
-    startCommand: npm run start --workspace apps/api
+    rootDir: .
+    healthCheckPath: /health
+    buildCommand: npm ci --include=dev && npx prisma generate --schema apps/api/prisma/schema.prisma && npm run build --workspace apps/api
+    startCommand: npm run db:push --workspace apps/api && npm run start --workspace apps/api
     envVars:
       - key: NODE_ENV
         value: production
       - key: DATABASE_URL
-        generateValue: true
+        fromDatabase:
+          name: gestor-db
+          property: connectionString
+
+databases:
+  - name: gestor-db
+    plan: free
+    databaseName: gestor_db
+    user: gestor_user
