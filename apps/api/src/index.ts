@@ -2,7 +2,6 @@ import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
-import './types/express.d.js';
 import { authMiddleware } from './middleware/authMiddleware.js';
 import {
   authenticateUser,
