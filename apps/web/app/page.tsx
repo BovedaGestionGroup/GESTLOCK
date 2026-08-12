@@ -211,8 +211,14 @@ export default function HomePage() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || 'Error de verificación');
-      setMessage('Correo verificado. Ahora puedes iniciar sesión.');
-      setMode('login');
+      
+      localStorage.setItem('accessToken', data.accessToken);
+      localStorage.setItem('refreshToken', data.refreshToken);
+      setUser(data.user);
+      setMessage('Correo verificado. Sesión iniciada correctamente.');
+      setEmail('');
+      setPassword('');
+      setConfirmPassword('');
       setVerificationCode('');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Error inesperado');

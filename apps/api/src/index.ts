@@ -111,11 +111,26 @@ app.post('/auth/verify-email', async (req, res) => {
       where: { id: user.id },
       data: { isVerified: true, verificationCode: null },
     });
-    await createAuditLog(user.id, 'verify_email', 'User verified email', {
+
+    const accessToken = signAccessToken(user.id);
+    const refreshToken = await createRefreshToken(user.id);
+
+    await createAuditLog(user.id, 'verify_email', 'User verified email and logged in', {
       ipAddress: req.ip,
       userAgent: req.get('user-agent'),
     });
-    res.json({ message: 'Email verified successfully' });
+
+    res.json({
+      message: 'Email verified successfully',
+      accessToken,
+      refreshToken,
+      user: {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        mfaEnabled: user.mfaEnabled,
+      }
+    });
   } catch (error) {
     res.status(500).json({ message: error instanceof Error ? error.message : 'Verification failed' });
   }
