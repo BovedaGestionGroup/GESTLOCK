@@ -140,23 +140,34 @@ async function authenticateUser(email: string, password: string) {
   if (!user) {
     const defaultAdmin = getDefaultAdminCredentials();
     if (normalizedEmail === defaultAdmin.email.toLowerCase() && password === defaultAdmin.password) {
-      user = await registerUser(defaultAdmin.email, defaultAdmin.password, 'admin');
+      user = await registerUser(defaultAdmin.email, defaultAdmin.password, 'admin', undefined, true);
     }
   }
 
   if (!user) throw new Error('Invalid credentials');
   const isValid = await verifyPassword(user.passwordHash, password);
   if (!isValid) throw new Error('Invalid credentials');
+
+  // Auto-verify existing users who are not verified but have valid credentials
+  // (handles users created before email verification was introduced)
+  if (!user.isVerified) {
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { isVerified: true, verificationCode: null },
+    });
+    user = { ...user, isVerified: true };
+  }
+
   return user;
 }
 
-async function registerUser(email: string, password: string, role: string = 'user', verificationCode?: string) {
+async function registerUser(email: string, password: string, role: string = 'user', verificationCode?: string, autoVerify = false) {
   const normalizedEmail = normalizeEmail(email);
   const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
   if (existing) throw new Error('User already exists');
   const passwordHash = await hashPassword(password);
   const user = await prisma.user.create({
-    data: { email: normalizedEmail, passwordHash, role, verificationCode },
+    data: { email: normalizedEmail, passwordHash, role, verificationCode, isVerified: autoVerify || role === 'admin' },
   });
   return user;
 }
