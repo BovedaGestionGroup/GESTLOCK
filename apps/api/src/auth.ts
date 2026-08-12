@@ -148,12 +148,12 @@ async function authenticateUser(email: string, password: string) {
   const isValid = await verifyPassword(user.passwordHash, password);
   if (!isValid) throw new Error('Invalid credentials');
 
-  // Auto-verify existing users who are not verified but have valid credentials
-  // (handles users created before email verification was introduced)
-  if (!user.isVerified) {
+  // Auto-verify ONLY legacy users (created before email verification was introduced)
+  // New users will have a verificationCode set, so they won't be auto-verified here
+  if (!user.isVerified && !user.verificationCode) {
     await prisma.user.update({
       where: { id: user.id },
-      data: { isVerified: true, verificationCode: null },
+      data: { isVerified: true },
     });
     user = { ...user, isVerified: true };
   }

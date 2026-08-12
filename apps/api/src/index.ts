@@ -68,7 +68,13 @@ app.post('/auth/register', async (req, res) => {
     const code = generateVerificationCode();
     const user = await registerUser(parsed.email, parsed.password, requestedRole, code);
     
-    await sendVerificationEmail(user.email, code);
+    // Send verification email — log error but don't fail registration
+    try {
+      await sendVerificationEmail(user.email, code);
+      console.log(`[AUTH] Verification email sent to ${user.email}`);
+    } catch (emailError) {
+      console.error(`[AUTH] Failed to send verification email to ${user.email}:`, emailError instanceof Error ? emailError.message : emailError);
+    }
 
     await createAuditLog(user.id, 'register', 'User registered, pending verification', {
       ipAddress: req.ip,
