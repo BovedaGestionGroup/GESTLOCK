@@ -237,7 +237,7 @@ export default function HomePage() {
     <main className="min-h-screen bg-slate-950 px-6 py-10 text-slate-100">
       <div className="mx-auto flex max-w-6xl flex-col gap-6">
         <header className="rounded-2xl border border-slate-800 bg-slate-900/80 p-6 flex flex-col sm:flex-row items-center sm:items-start gap-6">
-          <img src="/logo.png" alt="Gestion Group Logo" className="h-20 w-auto object-contain bg-white/5 p-2 rounded-xl" />
+          <img src="/logo.png" alt="Gestion Group Logo" className="h-20 w-auto object-contain mix-blend-screen" />
           <div>
             <p className="text-sm uppercase tracking-[0.3em] font-bold text-transparent bg-clip-text bg-gradient-to-r from-teal-400 to-cyan-400">Gestor empresarial</p>
             <h1 className="mt-2 text-3xl font-semibold">Gestión funcional de contraseñas</h1>
