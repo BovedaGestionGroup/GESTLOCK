@@ -180,6 +180,11 @@ export default function HomePage() {
 
       const data = await response.json();
       if (!response.ok) {
+        if (response.status === 403 && data.message.includes('not verified')) {
+          setMode('verify');
+          setMessage('Por favor, introduce el código de verificación que enviamos a tu correo.');
+          return;
+        }
         throw new Error(data.message || 'Error de autenticación');
       }
 
