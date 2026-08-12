@@ -270,6 +270,7 @@ app.get('/admin/users', authMiddleware, async (req, res) => {
         email: true,
         role: true,
         mfaEnabled: true,
+        isVerified: true,
         createdAt: true,
       },
       orderBy: { createdAt: 'asc' },
@@ -307,6 +308,28 @@ app.delete('/admin/users/:id', authMiddleware, async (req, res) => {
     res.json({ message: 'User deleted' });
   } catch (error) {
     res.status(400).json({ message: error instanceof Error ? error.message : 'Unable to delete user' });
+  }
+});
+
+app.post('/admin/users/:id/verify', authMiddleware, async (req, res) => {
+  try {
+    const userId = req.userId;
+    if (!userId) { res.status(401).json({ message: 'Unauthorized' }); return; }
+    const actor = await prisma.user.findUnique({ where: { id: userId } });
+    if (!actor || !hasPermission(actor.role, 'admin')) { res.status(403).json({ message: 'Forbidden' }); return; }
+    const targetId = getRouteParam(req.params.id);
+    await prisma.user.update({
+      where: { id: targetId },
+      data: { isVerified: true, verificationCode: null },
+    });
+    await createAuditLog(userId, 'admin_verify_user', 'User manually verified', {
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+      targetUserId: targetId,
+    });
+    res.json({ message: 'User verified' });
+  } catch (error) {
+    res.status(400).json({ message: error instanceof Error ? error.message : 'Unable to verify user' });
   }
 });
 

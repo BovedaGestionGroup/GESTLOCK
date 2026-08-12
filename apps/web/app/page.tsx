@@ -275,6 +275,21 @@ export default function HomePage() {
     }
   };
 
+  const handleVerifyUser = async (targetId: string, targetEmail: string) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/admin/users/${targetId}/verify`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'No se pudo verificar');
+      setMessage(`Usuario ${targetEmail} verificado correctamente`);
+      await loadAdminUsers();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Error inesperado');
+    }
+  };
+
   const handleCreateEntry = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setMessage('');
@@ -708,7 +723,12 @@ export default function HomePage() {
                           <div className="flex items-center justify-between gap-3">
                             <div>
                               <p className="font-medium text-sm">{adminUser.email}</p>
-                              <p className="text-xs text-slate-400">{adminUser.mfaEnabled ? 'MFA habilitado' : 'MFA no habilitado'}</p>
+                              <div className="flex items-center gap-2">
+                                <p className="text-xs text-slate-400">{adminUser.mfaEnabled ? 'MFA habilitado' : 'MFA no habilitado'}</p>
+                                <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${(adminUser as any).isVerified !== false ? 'bg-emerald-900/40 text-emerald-400' : 'bg-orange-900/40 text-orange-400'}`}>
+                                  {(adminUser as any).isVerified !== false ? '✓ Verificado' : '⚠ Sin verificar'}
+                                </span>
+                              </div>
                             </div>
                             <select
                               className="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm"
@@ -720,7 +740,15 @@ export default function HomePage() {
                               <option value="admin">admin</option>
                             </select>
                           </div>
-                          <div className="flex gap-2">
+                          <div className="flex gap-2 flex-wrap">
+                            {(adminUser as any).isVerified === false && (
+                              <button
+                                className="rounded bg-emerald-900/30 hover:bg-emerald-900/60 border border-emerald-900/40 px-2 py-1 text-xs text-emerald-400 transition-colors"
+                                onClick={() => void handleVerifyUser(adminUser.id, adminUser.email)}
+                              >
+                                ✅ Verificar
+                              </button>
+                            )}
                             <button
                               className="flex-1 rounded bg-cyan-900/30 hover:bg-cyan-900/50 border border-cyan-900/40 px-2 py-1 text-xs text-cyan-300 transition-colors"
                               onClick={() => void handleSendResetPassword(adminUser.id, adminUser.email)}
