@@ -25,6 +25,7 @@
     "nodemailer": "^9.0.5",
     "otplib": "^13.4.1",
     "prisma": "5.4.1",
+    "resend": "^6.19.0",
     "typescript": "5.5.4",
     "zod": "3.15.1"
   },

@@ -1,24 +1,19 @@
-import nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || 'smtp.gmail.com',
-  port: Number(process.env.SMTP_PORT) || 587,
-  secure: Number(process.env.SMTP_PORT) === 465, // true for 465, false for other ports
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-});
+// Initialize Resend with API key (can use SMTP_PASS if configured as Resend SMTP)
+const resendApiKey = process.env.RESEND_API_KEY || (process.env.SMTP_USER === 'resend' ? process.env.SMTP_PASS : undefined);
+const resend = resendApiKey ? new Resend(resendApiKey) : null;
+const fromEmail = process.env.SMTP_USER === 'resend' ? 'info@gestiongroup.es' : process.env.SMTP_USER || 'info@gestiongroup.es';
 
 export async function sendVerificationEmail(to: string, code: string) {
   // If SMTP is not configured, just log it for development purposes
-  if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+  if (!resend) {
     console.log(`[DEV MODE] Mock email to ${to}: Verification code is ${code}`);
     return;
   }
 
-  const mailOptions = {
-    from: `"Gestlock" <${process.env.SMTP_USER}>`,
+  const { error } = await resend.emails.send({
+    from: `Gestlock <${fromEmail}>`,
     to,
     subject: 'Tu código de verificación de Gestlock',
     html: `
@@ -32,19 +27,21 @@ export async function sendVerificationEmail(to: string, code: string) {
         <p style="color: #64748b; font-size: 12px; margin-top: 40px;">El equipo de Gestion Group</p>
       </div>
     `,
-  };
+  });
 
-  await transporter.sendMail(mailOptions);
+  if (error) {
+    throw new Error(error.message);
+  }
 }
 
 export async function sendPasswordResetEmail(to: string, resetUrl: string) {
-  if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+  if (!resend) {
     console.log(`[DEV MODE] Mock password reset email to ${to}: ${resetUrl}`);
     return;
   }
 
-  const mailOptions = {
-    from: `"Gestlock" <${process.env.SMTP_USER}>`,
+  const { error } = await resend.emails.send({
+    from: `Gestlock <${fromEmail}>`,
     to,
     subject: 'Restablecer tu contraseña de Gestlock',
     html: `
@@ -60,7 +57,9 @@ export async function sendPasswordResetEmail(to: string, resetUrl: string) {
         <p style="color: #64748b; font-size: 12px; margin-top: 40px;">El equipo de Gestion Group</p>
       </div>
     `,
-  };
+  });
 
-  await transporter.sendMail(mailOptions);
+  if (error) {
+    throw new Error(error.message);
+  }
 }
