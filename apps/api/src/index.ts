@@ -412,9 +412,7 @@ app.get('/vault/entries/:id/history', authMiddleware, async (req, res) => {
         }
       },
       include: {
-        user: {
-          select: { email: true }
-        }
+        user: true
       },
       orderBy: { createdAt: 'desc' }
     });

@@ -67,8 +67,8 @@ export const prisma = {
   auditLog: {
     create: async ({ data }: { data: { userId?: string; action: string; details?: string; ipAddress?: string; userAgent?: string } }) =>
       prismaClient.auditLog.create({ data }),
-    findMany: async ({ where, orderBy, take }: { where: any; orderBy?: any; take?: number }) =>
-      prismaClient.auditLog.findMany({ where, orderBy, take }),
+    findMany: async ({ where, orderBy, take, include }: { where: any; orderBy?: any; take?: number; include?: any }) =>
+      prismaClient.auditLog.findMany({ where, orderBy, take, include }),
     deleteMany: async () => prismaClient.auditLog.deleteMany(),
   },
 };
