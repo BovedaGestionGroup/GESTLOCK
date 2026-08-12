@@ -23,9 +23,11 @@ export const prisma = {
     },
     findMany: async ({ select, orderBy }: { select?: any; orderBy?: any }) =>
       prismaClient.user.findMany({ select, orderBy }),
-    create: async ({ data }: { data: { email: string; passwordHash: string; role?: string; mfaEnabled?: boolean; mfaSecret?: string | null } }) =>
+    create: async ({ data }: { data: { email: string; passwordHash: string; role?: string; mfaEnabled?: boolean; mfaSecret?: string | null; isVerified?: boolean; verificationCode?: string | null } }) =>
       prismaClient.user.create({ data }),
     update: async ({ where, data, select }: { where: { id: string }; data: any; select?: any }) => prismaClient.user.update({ where, data, select }),
+    delete: async ({ where }: { where: { id: string } }) => prismaClient.user.delete({ where }),
+    updateMany: async ({ where, data }: { where: any; data: any }) => prismaClient.user.updateMany({ where, data }),
   },
   refreshToken: {
     findUnique: async ({ where }: { where: { token?: string } }) => {
@@ -37,6 +39,14 @@ export const prisma = {
       prismaClient.refreshToken.create({ data }),
     updateMany: async ({ where, data }: { where: { token: string }; data: { revoked: boolean } }) =>
       prismaClient.refreshToken.updateMany({ where: { token: where.token }, data }),
+  },
+  passwordResetToken: {
+    findUnique: async ({ where }: { where: { token: string } }) =>
+      prismaClient.passwordResetToken.findUnique({ where }),
+    create: async ({ data }: { data: { token: string; userId: string; expiresAt: Date } }) =>
+      prismaClient.passwordResetToken.create({ data }),
+    update: async ({ where, data }: { where: { token: string }; data: any }) =>
+      prismaClient.passwordResetToken.update({ where, data }),
   },
   vaultEntry: {
     create: async ({ data }: { data: any }) => prismaClient.vaultEntry.create({ data }),
@@ -72,3 +82,4 @@ export const prisma = {
     deleteMany: async () => prismaClient.auditLog.deleteMany(),
   },
 };
+

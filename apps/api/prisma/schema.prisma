@@ -18,10 +18,11 @@ model User {
   verificationCode   String?
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
-  refreshTokens     RefreshToken[]
+  refreshTokens      RefreshToken[]
   auditLogs          AuditLog[]
   vaultEntries       VaultEntry[]
   vaultEntryShares   VaultEntryShare[]
+  passwordResets     PasswordResetToken[]
 }
 
 model RefreshToken {
@@ -68,4 +69,14 @@ model VaultEntryShare {
   createdAt DateTime   @default(now())
 
   @@unique([entryId, userId])
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
 }

@@ -51,6 +51,10 @@ export default function HomePage() {
   const [verificationCode, setVerificationCode] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showEntryPassword, setShowEntryPassword] = useState(false);
+  const [resetToken, setResetToken] = useState('');
+  const [resetEmail, setResetEmail] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
 
   // Estados para Importación Excel
   const [importFile, setImportFile] = useState<File | null>(null);
@@ -116,6 +120,15 @@ export default function HomePage() {
     const token = localStorage.getItem('accessToken');
     if (token) {
       void loadMe();
+    }
+    // Handle password reset link from email
+    const params = new URLSearchParams(window.location.search);
+    const rt = params.get('resetToken');
+    const re = params.get('email');
+    if (rt && re) {
+      setResetToken(rt);
+      setResetEmail(re);
+      setMode('login'); // will show reset form instead
     }
   }, []);
 
@@ -201,6 +214,62 @@ export default function HomePage() {
       setMessage('Correo verificado. Ahora puedes iniciar sesión.');
       setMode('login');
       setVerificationCode('');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Error inesperado');
+    }
+  };
+
+  const handleResetPassword = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setMessage('');
+    if (newPassword !== confirmNewPassword) {
+      setMessage('Las contraseñas no coinciden');
+      return;
+    }
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/reset-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: resetToken, email: resetEmail, newPassword }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Error al restablecer');
+      setMessage('¡Contraseña restablecida! Ya puedes iniciar sesión.');
+      setResetToken('');
+      setResetEmail('');
+      setNewPassword('');
+      setConfirmNewPassword('');
+      window.history.replaceState({}, '', window.location.pathname);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Error inesperado');
+    }
+  };
+
+  const handleDeleteUser = async (targetId: string, targetEmail: string) => {
+    if (!confirm(`¿Seguro que quieres eliminar al usuario ${targetEmail}? Esta acción no se puede deshacer.`)) return;
+    try {
+      const response = await fetch(`${API_BASE_URL}/admin/users/${targetId}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'No se pudo eliminar');
+      setMessage(`Usuario ${targetEmail} eliminado correctamente`);
+      await loadAdminUsers();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Error inesperado');
+    }
+  };
+
+  const handleSendResetPassword = async (targetId: string, targetEmail: string) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/admin/users/${targetId}/send-reset-password`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'No se pudo enviar');
+      setMessage(`Correo de restablecimiento enviado a ${targetEmail}`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Error inesperado');
     }
@@ -474,7 +543,33 @@ export default function HomePage() {
         {!user ? (
           <section className="grid gap-6 lg:grid-cols-[1fr_0.9fr]">
             <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-6">
-              <h2 className="text-xl font-semibold">Acceso al sistema</h2>
+              <h2 className="text-xl font-semibold">{resetToken ? 'Nueva contraseña' : 'Acceso al sistema'}</h2>
+              {resetToken ? (
+                <form className="mt-4 space-y-4" onSubmit={handleResetPassword}>
+                  <p className="text-sm text-slate-400">Restableciendo contraseña para <strong className="text-slate-200">{resetEmail}</strong></p>
+                  <input
+                    className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2"
+                    type="password"
+                    placeholder="Nueva contraseña (mín. 12 caracteres)"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    minLength={12}
+                    required
+                  />
+                  <input
+                    className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2"
+                    type="password"
+                    placeholder="Confirmar nueva contraseña"
+                    value={confirmNewPassword}
+                    onChange={(e) => setConfirmNewPassword(e.target.value)}
+                    required
+                  />
+                  <button className="w-full rounded bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-400 hover:to-cyan-400 transition-all px-3 py-2 font-semibold shadow-lg shadow-cyan-900/20 text-white" type="submit">
+                    Guardar nueva contraseña
+                  </button>
+                  {message ? <p className="mt-2 text-sm text-cyan-300">{message}</p> : null}
+                </form>
+              ) : (
               <form className="mt-4 space-y-4" onSubmit={handleAuth}>
                 <div className="flex gap-2">
                   <button
@@ -575,7 +670,8 @@ export default function HomePage() {
               </>
             )}
           </form>
-              {message ? <p className="mt-4 text-sm text-cyan-300">{message}</p> : null}
+              )}
+              {message && !resetToken ? <p className="mt-4 text-sm text-cyan-300">{message}</p> : null}
             </div>
 
             <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-6">
@@ -608,20 +704,36 @@ export default function HomePage() {
                     <p className="mt-2 text-sm text-slate-400">Gestiona usuarios y roles desde la consola administrativa.</p>
                     <div className="mt-4 space-y-3">
                       {adminUsers.map((adminUser) => (
-                        <div key={adminUser.id} className="flex items-center justify-between gap-3 rounded border border-slate-800 bg-slate-950/70 p-3">
-                          <div>
-                            <p className="font-medium">{adminUser.email}</p>
-                            <p className="text-xs text-slate-400">{adminUser.mfaEnabled ? 'MFA habilitado' : 'MFA no habilitado'}</p>
+                        <div key={adminUser.id} className="rounded border border-slate-800 bg-slate-950/70 p-3 space-y-2">
+                          <div className="flex items-center justify-between gap-3">
+                            <div>
+                              <p className="font-medium text-sm">{adminUser.email}</p>
+                              <p className="text-xs text-slate-400">{adminUser.mfaEnabled ? 'MFA habilitado' : 'MFA no habilitado'}</p>
+                            </div>
+                            <select
+                              className="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm"
+                              value={adminUser.role}
+                              onChange={(event) => void handleRoleChange(adminUser.id, event.target.value)}
+                            >
+                              <option value="user">user</option>
+                              <option value="auditor">auditor</option>
+                              <option value="admin">admin</option>
+                            </select>
                           </div>
-                          <select
-                            className="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm"
-                            value={adminUser.role}
-                            onChange={(event) => void handleRoleChange(adminUser.id, event.target.value)}
-                          >
-                            <option value="user">user</option>
-                            <option value="auditor">auditor</option>
-                            <option value="admin">admin</option>
-                          </select>
+                          <div className="flex gap-2">
+                            <button
+                              className="flex-1 rounded bg-cyan-900/30 hover:bg-cyan-900/50 border border-cyan-900/40 px-2 py-1 text-xs text-cyan-300 transition-colors"
+                              onClick={() => void handleSendResetPassword(adminUser.id, adminUser.email)}
+                            >
+                              🔑 Restablecer contraseña
+                            </button>
+                            <button
+                              className="rounded bg-red-900/30 hover:bg-red-900/60 border border-red-900/40 px-2 py-1 text-xs text-red-400 transition-colors"
+                              onClick={() => void handleDeleteUser(adminUser.id, adminUser.email)}
+                            >
+                              🗑 Eliminar
+                            </button>
+                          </div>
                         </div>
                       ))}
                     </div>

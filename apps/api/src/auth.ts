@@ -183,4 +183,5 @@ export {
   encryptSecret,
   decryptSecret,
   generateVerificationCode,
+  hashPassword,
 };

@@ -1,4 +1,5 @@
 import express from 'express';
+import { randomBytes } from 'crypto';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
@@ -19,8 +20,9 @@ import {
   signAccessToken,
   verifyRefreshToken,
   generateVerificationCode,
+  hashPassword,
 } from './auth.js';
-import { sendVerificationEmail } from './email.js';
+import { sendVerificationEmail, sendPasswordResetEmail } from './email.js';
 import { prisma } from './lib/prisma.js';
 
 async function createAuditLog(userId: string | undefined, action: string, details: string, metadata?: Record<string, string | undefined>) {
@@ -270,6 +272,115 @@ app.get('/admin/users', authMiddleware, async (req, res) => {
     res.json({ users });
   } catch (error) {
     res.status(500).json({ message: error instanceof Error ? error.message : 'Unable to list users' });
+  }
+});
+
+app.delete('/admin/users/:id', authMiddleware, async (req, res) => {
+  try {
+    const userId = req.userId;
+    if (!userId) {
+      res.status(401).json({ message: 'Unauthorized' });
+      return;
+    }
+    const actor = await prisma.user.findUnique({ where: { id: userId } });
+    if (!actor || !hasPermission(actor.role, 'admin')) {
+      res.status(403).json({ message: 'Forbidden' });
+      return;
+    }
+    const targetId = getRouteParam(req.params.id);
+    if (targetId === userId) {
+      res.status(400).json({ message: 'No puedes eliminar tu propia cuenta' });
+      return;
+    }
+    await prisma.user.delete({ where: { id: targetId } });
+    await createAuditLog(userId, 'admin_delete_user', 'User deleted', {
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+      targetUserId: targetId,
+    });
+    res.json({ message: 'User deleted' });
+  } catch (error) {
+    res.status(400).json({ message: error instanceof Error ? error.message : 'Unable to delete user' });
+  }
+});
+
+app.post('/admin/users/:id/send-reset-password', authMiddleware, async (req, res) => {
+  try {
+    const userId = req.userId;
+    if (!userId) {
+      res.status(401).json({ message: 'Unauthorized' });
+      return;
+    }
+    const actor = await prisma.user.findUnique({ where: { id: userId } });
+    if (!actor || !hasPermission(actor.role, 'admin')) {
+      res.status(403).json({ message: 'Forbidden' });
+      return;
+    }
+    const targetId = getRouteParam(req.params.id);
+    const target = await prisma.user.findUnique({ where: { id: targetId } });
+    if (!target) {
+      res.status(404).json({ message: 'User not found' });
+      return;
+    }
+    const token = randomBytes(32).toString('hex');
+    await prisma.passwordResetToken.create({
+      data: {
+        token,
+        userId: targetId,
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+      },
+    });
+    const appUrl = process.env.APP_URL || 'http://localhost:3000';
+    const resetUrl = `${appUrl}?resetToken=${token}&email=${encodeURIComponent(target.email)}`;
+    await sendPasswordResetEmail(target.email, resetUrl);
+    await createAuditLog(userId, 'admin_send_reset_password', 'Password reset sent', {
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+      targetUserId: targetId,
+    });
+    res.json({ message: `Reset email sent to ${target.email}` });
+  } catch (error) {
+    res.status(500).json({ message: error instanceof Error ? error.message : 'Unable to send reset email' });
+  }
+});
+
+app.post('/auth/reset-password', async (req, res) => {
+  try {
+    const { token, email, newPassword } = req.body;
+    if (!token || !email || !newPassword) {
+      res.status(400).json({ message: 'Token, email and new password are required' });
+      return;
+    }
+    if (typeof newPassword !== 'string' || newPassword.length < 12) {
+      res.status(400).json({ message: 'La contraseña debe tener al menos 12 caracteres' });
+      return;
+    }
+    const resetToken = await prisma.passwordResetToken.findUnique({ where: { token } });
+    if (!resetToken || resetToken.used || resetToken.expiresAt < new Date()) {
+      res.status(400).json({ message: 'El enlace es inválido o ha expirado' });
+      return;
+    }
+    const user = await prisma.user.findUnique({ where: { id: resetToken.userId } });
+    if (!user || user.email !== email.toLowerCase().trim()) {
+      res.status(400).json({ message: 'Token o email no válido' });
+      return;
+    }
+    const passwordHash = await hashPassword(newPassword);
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { passwordHash, isVerified: true },
+    });
+    await prisma.passwordResetToken.update({
+      where: { token },
+      data: { used: true },
+    });
+    await createAuditLog(user.id, 'reset_password', 'Password reset completed', {
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+    });
+    res.json({ message: 'Contraseña restablecida correctamente' });
+  } catch (error) {
+    res.status(500).json({ message: error instanceof Error ? error.message : 'Reset failed' });
   }
 });
 
