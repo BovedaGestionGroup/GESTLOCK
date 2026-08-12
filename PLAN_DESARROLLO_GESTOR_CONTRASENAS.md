@@ -101,7 +101,7 @@ hasta que la anterior esté finalizada, probada y documentada.
 
 ## ETAPA 13 - Producción
 
--   Despliegue.
+-   Despliegue Híbrido: Frontend (`apps/web`) en Vercel (sin cold start) y Backend/BD (`apps/api`) en Render.
 -   Hardening.
 -   Monitorización.
 -   Manuales.

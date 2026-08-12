@@ -10,7 +10,7 @@ services:
       - key: NODE_ENV
         value: production
       - key: NEXT_PUBLIC_API_URL
-        value: https://gestor-api.onrender.com
+        value: https://gestor-api-vjy0.onrender.com
 
   - type: web
     name: gestor-api

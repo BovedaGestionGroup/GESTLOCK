@@ -236,12 +236,15 @@ export default function HomePage() {
   return (
     <main className="min-h-screen bg-slate-950 px-6 py-10 text-slate-100">
       <div className="mx-auto flex max-w-6xl flex-col gap-6">
-        <header className="rounded-2xl border border-slate-800 bg-slate-900/80 p-6">
-          <p className="text-sm uppercase tracking-[0.3em] text-cyan-400">Gestor empresarial</p>
-          <h1 className="mt-2 text-3xl font-semibold">Gestión funcional de contraseñas</h1>
-          <p className="mt-3 max-w-2xl text-slate-300">
-            Autenticación, bóveda y búsqueda operativa desde el navegador.
-          </p>
+        <header className="rounded-2xl border border-slate-800 bg-slate-900/80 p-6 flex flex-col sm:flex-row items-center sm:items-start gap-6">
+          <img src="/logo.png" alt="Gestion Group Logo" className="h-20 w-auto object-contain bg-white/5 p-2 rounded-xl" />
+          <div>
+            <p className="text-sm uppercase tracking-[0.3em] font-bold text-transparent bg-clip-text bg-gradient-to-r from-teal-400 to-cyan-400">Gestor empresarial</p>
+            <h1 className="mt-2 text-3xl font-semibold">Gestión funcional de contraseñas</h1>
+            <p className="mt-3 max-w-2xl text-slate-300">
+              Autenticación, bóveda y búsqueda operativa desde el navegador.
+            </p>
+          </div>
         </header>
 
         {!user ? (
@@ -252,7 +255,7 @@ export default function HomePage() {
                 <div className="flex gap-2">
                   <button
                     type="button"
-                    className={`rounded px-3 py-2 ${mode === 'login' ? 'bg-cyan-600' : 'bg-slate-800'}`}
+                    className={`rounded px-3 py-2 font-medium transition-all ${mode === 'login' ? 'bg-gradient-to-r from-teal-500 to-cyan-500 shadow-md shadow-cyan-900/20 text-white' : 'bg-slate-800 hover:bg-slate-700'}`}
                     onClick={() => {
                       setMode('login');
                       setConfirmPassword('');
@@ -263,7 +266,7 @@ export default function HomePage() {
                   </button>
                   <button
                     type="button"
-                    className={`rounded px-3 py-2 ${mode === 'register' ? 'bg-cyan-600' : 'bg-slate-800'}`}
+                    className={`rounded px-3 py-2 font-medium transition-all ${mode === 'register' ? 'bg-gradient-to-r from-teal-500 to-cyan-500 shadow-md shadow-cyan-900/20 text-white' : 'bg-slate-800 hover:bg-slate-700'}`}
                     onClick={() => {
                       setMode('register');
                       setMessage('');
@@ -313,7 +316,7 @@ export default function HomePage() {
                     </button>
                   </div>
                 ) : null}
-                <button className="w-full rounded bg-cyan-600 px-3 py-2 font-semibold" type="submit">
+                <button className="w-full rounded bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-400 hover:to-cyan-400 transition-all px-3 py-2 font-semibold shadow-lg shadow-cyan-900/20 text-white" type="submit">
                   {mode === 'login' ? 'Entrar' : 'Crear cuenta'}
                 </button>
               </form>
@@ -413,7 +416,7 @@ export default function HomePage() {
                     value={entryForm.notes}
                     onChange={(event) => setEntryForm({ ...entryForm, notes: event.target.value })}
                   />
-                  <button className="w-full rounded bg-cyan-600 px-3 py-2 font-semibold" type="submit">
+                  <button className="w-full rounded bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-400 hover:to-cyan-400 transition-all px-3 py-2 font-semibold shadow-lg shadow-cyan-900/20 text-white" type="submit">
                     Guardar entrada
                   </button>
                 </form>
@@ -467,7 +470,7 @@ export default function HomePage() {
                               </option>
                             ))}
                           </select>
-                          <button className="rounded bg-cyan-600 px-3 py-2 text-sm" onClick={() => void handleShareEntry(entry.id)}>
+                          <button className="rounded bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-400 hover:to-cyan-400 px-3 py-2 text-sm font-medium shadow-md shadow-cyan-900/20 transition-all text-white" onClick={() => void handleShareEntry(entry.id)}>
                             Compartir
                           </button>
                         </div>
