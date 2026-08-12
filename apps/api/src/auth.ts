@@ -88,6 +88,10 @@ function generateMfaSecret() {
   return generateSecret();
 }
 
+function generateVerificationCode() {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
 async function verifyMfaCode(secret: string, code: string) {
   const result = await verify({ secret, token: code });
   return result.valid;
@@ -146,13 +150,13 @@ async function authenticateUser(email: string, password: string) {
   return user;
 }
 
-async function registerUser(email: string, password: string, role: string = 'user') {
+async function registerUser(email: string, password: string, role: string = 'user', verificationCode?: string) {
   const normalizedEmail = normalizeEmail(email);
   const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
   if (existing) throw new Error('User already exists');
   const passwordHash = await hashPassword(password);
   const user = await prisma.user.create({
-    data: { email: normalizedEmail, passwordHash, role },
+    data: { email: normalizedEmail, passwordHash, role, verificationCode },
   });
   return user;
 }
@@ -178,4 +182,5 @@ export {
   deriveEncryptionKey,
   encryptSecret,
   decryptSecret,
+  generateVerificationCode,
 };

@@ -18,7 +18,9 @@ import {
   revokeRefreshToken,
   signAccessToken,
   verifyRefreshToken,
+  generateVerificationCode,
 } from './auth.js';
+import { sendVerificationEmail } from './email.js';
 import { prisma } from './lib/prisma.js';
 
 async function createAuditLog(userId: string | undefined, action: string, details: string, metadata?: Record<string, string | undefined>) {
@@ -61,22 +63,53 @@ app.post('/auth/register', async (req, res) => {
   try {
     const parsed = registerSchema.parse(req.body);
     const requestedRole = typeof req.body.role === 'string' ? req.body.role : 'user';
-    const user = await registerUser(parsed.email, parsed.password, requestedRole);
-    const accessToken = signAccessToken(user.id);
-    const refreshToken = await createRefreshToken(user.id);
-    await createAuditLog(user.id, 'register', 'User registered', {
+    const code = generateVerificationCode();
+    const user = await registerUser(parsed.email, parsed.password, requestedRole, code);
+    
+    await sendVerificationEmail(user.email, code);
+
+    await createAuditLog(user.id, 'register', 'User registered, pending verification', {
       ipAddress: req.ip,
       userAgent: req.get('user-agent'),
     });
-    res.cookie('refreshToken', refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
-    res.status(201).json({ user: { id: user.id, email: user.email, role: user.role }, accessToken, refreshToken });
+    
+    res.status(201).json({ message: 'User registered. Please verify your email.' });
   } catch (error) {
     res.status(400).json({ message: error instanceof Error ? error.message : 'Registration failed' });
+  }
+});
+
+app.post('/auth/verify-email', async (req, res) => {
+  try {
+    const { email, code } = req.body;
+    if (!email || !code) {
+      res.status(400).json({ message: 'Email and code are required' });
+      return;
+    }
+    const user = await prisma.user.findUnique({ where: { email: email.toLowerCase().trim() } });
+    if (!user) {
+      res.status(404).json({ message: 'User not found' });
+      return;
+    }
+    if (user.isVerified) {
+      res.status(400).json({ message: 'Email is already verified' });
+      return;
+    }
+    if (user.verificationCode !== code) {
+      res.status(400).json({ message: 'Invalid verification code' });
+      return;
+    }
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { isVerified: true, verificationCode: null },
+    });
+    await createAuditLog(user.id, 'verify_email', 'User verified email', {
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+    });
+    res.json({ message: 'Email verified successfully' });
+  } catch (error) {
+    res.status(500).json({ message: error instanceof Error ? error.message : 'Verification failed' });
   }
 });
 
@@ -85,6 +118,11 @@ app.post('/auth/login', async (req, res) => {
     const parsed = loginSchema.parse(req.body);
     const user = await authenticateUser(parsed.email, parsed.password);
     const code = typeof req.body.code === 'string' ? req.body.code : undefined;
+
+    if (!user.isVerified) {
+      res.status(403).json({ message: 'Email not verified. Please check your inbox for the verification code.' });
+      return;
+    }
 
     if (user.mfaEnabled) {
       if (!user.mfaSecret || !code || !(await verifyMfaCode(user.mfaSecret, code))) {

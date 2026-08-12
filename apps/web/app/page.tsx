@@ -31,7 +31,7 @@ type AdminUser = {
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
 export default function HomePage() {
-  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [mode, setMode] = useState<'login' | 'register' | 'verify'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [user, setUser] = useState<User | null>(null);
@@ -48,6 +48,7 @@ export default function HomePage() {
   const [adminUsers, setAdminUsers] = useState<AdminUser[]>([]);
   const [shareTargets, setShareTargets] = useState<Record<string, string>>({});
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [verificationCode, setVerificationCode] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showEntryPassword, setShowEntryPassword] = useState(false);
 
@@ -169,13 +170,37 @@ export default function HomePage() {
         throw new Error(data.message || 'Error de autenticación');
       }
 
-      localStorage.setItem('accessToken', data.accessToken);
-      localStorage.setItem('refreshToken', data.refreshToken);
-      setUser(data.user);
-      setMessage(mode === 'login' ? 'Inicio de sesión correcto' : 'Usuario registrado correctamente');
-      setEmail('');
-      setPassword('');
-      setConfirmPassword('');
+      if (mode === 'register') {
+        setMode('verify');
+        setMessage('Usuario registrado. Revisa tu correo para obtener el código de verificación.');
+      } else {
+        localStorage.setItem('accessToken', data.accessToken);
+        localStorage.setItem('refreshToken', data.refreshToken);
+        setUser(data.user);
+        setMessage('Inicio de sesión correcto');
+        setEmail('');
+        setPassword('');
+        setConfirmPassword('');
+      }
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Error inesperado');
+    }
+  };
+
+  const handleVerifyEmail = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setMessage('');
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/verify-email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, code: verificationCode }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Error de verificación');
+      setMessage('Correo verificado. Ahora puedes iniciar sesión.');
+      setMode('login');
+      setVerificationCode('');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Error inesperado');
     }
@@ -433,15 +458,17 @@ export default function HomePage() {
   return (
     <main className="min-h-screen bg-slate-950 px-6 py-10 text-slate-100">
       <div className="mx-auto flex max-w-6xl flex-col gap-6">
-        <header className="rounded-2xl border border-slate-800 bg-slate-900/80 p-6 flex flex-col sm:flex-row items-center sm:items-start gap-6">
-          <img src="/logo.png" alt="Gestion Group Logo" className="h-20 w-auto object-contain mix-blend-screen" />
-          <div>
-            <p className="text-sm uppercase tracking-[0.3em] font-bold text-transparent bg-clip-text bg-gradient-to-r from-teal-400 to-cyan-400">Gestor empresarial</p>
-            <h1 className="mt-2 text-3xl font-semibold">Gestión funcional de contraseñas</h1>
-            <p className="mt-3 max-w-2xl text-slate-300">
-              Autenticación, bóveda y búsqueda operativa desde el navegador.
-            </p>
+        <header className="rounded-2xl border border-slate-800 bg-slate-900/80 p-6 flex flex-col sm:flex-row items-center justify-between gap-6">
+          <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6">
+            <img src="/logo.png" alt="Gestion Group Logo" className="h-20 w-auto object-contain mix-blend-screen" />
+            <div>
+              <h1 className="mt-2 text-3xl font-semibold">Gestión funcional de contraseñas</h1>
+              <p className="mt-3 max-w-2xl text-slate-300">
+                Autenticación, bóveda y búsqueda operativa desde el navegador.
+              </p>
+            </div>
           </div>
+          <img src="/gestlock-logo.png.png" alt="Gestlock Logo" className="h-28 w-auto object-contain mix-blend-screen" />
         </header>
 
         {!user ? (
@@ -471,14 +498,43 @@ export default function HomePage() {
                   >
                     Registrarse
                   </button>
+                  <button
+                    type="button"
+                    className={`rounded px-3 py-2 font-medium transition-all ${mode === 'verify' ? 'bg-gradient-to-r from-teal-500 to-cyan-500 shadow-md shadow-cyan-900/20 text-white' : 'hidden'}`}
+                  >
+                    Verificar
+                  </button>
                 </div>
 
-                <input
-                  className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2"
-                  placeholder="Correo corporativo"
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                />
+                {mode === 'verify' ? (
+                  <form className="mt-4 space-y-4" onSubmit={handleVerifyEmail}>
+                    <p className="text-sm text-slate-300">Se ha enviado un código a <strong>{email}</strong></p>
+                    <input
+                      className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-center text-xl tracking-[0.5em] font-mono"
+                      placeholder="000000"
+                      maxLength={6}
+                      value={verificationCode}
+                      onChange={(event) => setVerificationCode(event.target.value)}
+                    />
+                    <button className="w-full rounded bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-400 hover:to-cyan-400 transition-all px-3 py-2 font-semibold shadow-lg shadow-cyan-900/20 text-white" type="submit">
+                      Verificar y continuar
+                    </button>
+                    <button 
+                      type="button" 
+                      className="w-full text-sm text-slate-400 hover:text-white"
+                      onClick={() => setMode('login')}
+                    >
+                      Volver a inicio de sesión
+                    </button>
+                  </form>
+                ) : (
+                  <>
+                    <input
+                      className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2"
+                      placeholder="Correo corporativo"
+                      value={email}
+                      onChange={(event) => setEmail(event.target.value)}
+                    />
                 <div className="relative">
                   <input
                     className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2"
@@ -516,7 +572,9 @@ export default function HomePage() {
                 <button className="w-full rounded bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-400 hover:to-cyan-400 transition-all px-3 py-2 font-semibold shadow-lg shadow-cyan-900/20 text-white" type="submit">
                   {mode === 'login' ? 'Entrar' : 'Crear cuenta'}
                 </button>
-              </form>
+              </>
+            )}
+          </form>
               {message ? <p className="mt-4 text-sm text-cyan-300">{message}</p> : null}
             </div>
 
