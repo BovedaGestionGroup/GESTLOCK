@@ -3,7 +3,7 @@ import { Resend } from 'resend';
 // Initialize Resend with API key (can use SMTP_PASS if configured as Resend SMTP)
 const resendApiKey = process.env.RESEND_API_KEY || (process.env.SMTP_USER === 'resend' ? process.env.SMTP_PASS : undefined);
 const resend = resendApiKey ? new Resend(resendApiKey) : null;
-const fromEmail = process.env.SMTP_USER === 'resend' ? 'info@gestiongroup.es' : process.env.SMTP_USER || 'info@gestiongroup.es';
+const fromEmail = 'info@gestiongroup.es'; // Forced to verified domain
 
 export async function sendVerificationEmail(to: string, code: string) {
   // If SMTP is not configured, just log it for development purposes
