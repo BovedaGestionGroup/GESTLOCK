@@ -389,6 +389,42 @@ app.get('/vault/entries', authMiddleware, async (req, res) => {
   }
 });
 
+app.get('/vault/entries/:id/history', authMiddleware, async (req, res) => {
+  try {
+    const userId = req.userId;
+    const entryId = getRouteParam(req.params.id);
+
+    if (!userId) {
+      res.status(401).json({ message: 'Unauthorized' });
+      return;
+    }
+
+    const actor = await prisma.user.findUnique({ where: { id: userId } });
+    if (!actor || (!hasPermission(actor.role, 'admin') && !hasPermission(actor.role, 'auditor'))) {
+      res.status(403).json({ message: 'Forbidden' });
+      return;
+    }
+
+    const logs = await prisma.auditLog.findMany({
+      where: {
+        details: {
+          contains: `"entryId":"${entryId}"`
+        }
+      },
+      include: {
+        user: {
+          select: { email: true }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    res.json({ logs });
+  } catch (error) {
+    res.status(500).json({ message: error instanceof Error ? error.message : 'Unable to load history' });
+  }
+});
+
 app.post('/vault/entries/:id/shares', authMiddleware, async (req, res) => {
   try {
     const userId = req.userId;
@@ -464,6 +500,30 @@ app.put('/vault/entries/:id', authMiddleware, async (req, res) => {
     }
 
     const encryptionKey = deriveEncryptionKey(process.env.VAULT_MASTER_SECRET ?? 'dev-master-secret');
+    
+    // Detect changed fields
+    const changedFields = [];
+    if (req.body.name && req.body.name !== target.name) changedFields.push('nombre');
+    if (req.body.url && req.body.url !== target.url) changedFields.push('url');
+    if (req.body.username && req.body.username !== target.username) changedFields.push('usuario');
+    
+    let isPasswordChanged = false;
+    if (req.body.password) {
+      try {
+        const decryptedTarget = target.password ? decryptSecret(target.password, encryptionKey) : '';
+        if (req.body.password !== decryptedTarget) {
+          isPasswordChanged = true;
+          changedFields.push('contraseña');
+        }
+      } catch (e) {
+        // En caso de fallo al desencriptar, asumimos que cambió
+        isPasswordChanged = true;
+        changedFields.push('contraseña');
+      }
+    }
+
+    if (req.body.notes !== undefined && req.body.notes !== target.notes) changedFields.push('notas');
+
     const updated = await prisma.vaultEntry.update({
       where: { id: entryId },
       data: {
@@ -477,6 +537,7 @@ app.put('/vault/entries/:id', authMiddleware, async (req, res) => {
       ipAddress: req.ip,
       userAgent: req.get('user-agent'),
       entryId,
+      changes: changedFields.length > 0 ? changedFields.join(', ') : 'ninguno',
     });
 
     res.json({
