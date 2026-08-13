@@ -553,17 +553,12 @@ export default function HomePage() {
   return (
     <main className="min-h-screen bg-slate-950 px-6 py-10 text-slate-100">
       <div className="mx-auto flex max-w-6xl flex-col gap-6">
-        <header className="rounded-2xl border border-slate-800 bg-slate-900/80 p-6 flex flex-col sm:flex-row items-center justify-between gap-6">
-          <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6">
-            <img src="/logo.png" alt="Gestion Group Logo" className="h-20 w-auto object-contain mix-blend-screen" />
-            <div>
-              <h1 className="mt-2 text-3xl font-semibold">Gestión funcional de contraseñas</h1>
-              <p className="mt-3 max-w-2xl text-slate-300">
-                Autenticación, bóveda y búsqueda operativa desde el navegador.
-              </p>
-            </div>
+        <header className="rounded-2xl border border-slate-800 bg-slate-900/80 p-6 flex flex-row items-center justify-between gap-6">
+          <img src="/gestlock-logo.png.png" alt="Gestlock Logo" className="h-32 w-auto object-contain mix-blend-screen" />
+          <div className="flex-1 flex flex-col items-center justify-center text-center">
+            <h1 className="text-3xl font-semibold">Gestión funcional de contraseñas</h1>
           </div>
-          <img src="/gestlock-logo.png.png" alt="Gestlock Logo" className="h-28 w-auto object-contain mix-blend-screen" />
+          <img src="/logo.png" alt="Gestion Group Logo" className="h-20 w-auto object-contain mix-blend-screen" />
         </header>
 
         {!user ? (
