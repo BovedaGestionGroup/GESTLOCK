@@ -31,6 +31,10 @@ type AdminUser = {
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
 export default function HomePage() {
+  type Section = 'vault' | 'new-entry' | 'admin' | 'import';
+  const [activeSection, setActiveSection] = useState<Section>('vault');
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
   const [mode, setMode] = useState<'login' | 'register' | 'verify'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -335,6 +339,8 @@ export default function HomePage() {
     setEditingEntryId(null);
     setEditForm({});
     setMessage('Sesión cerrada');
+    setActiveSection('vault');
+    setIsMobileMenuOpen(false);
   };
 
   const handleRoleChange = async (targetId: string, role: string) => {
@@ -551,14 +557,24 @@ export default function HomePage() {
   };
 
   return (
-    <main className="min-h-screen bg-slate-950 px-6 py-10 text-slate-100">
+    <main className="min-h-screen bg-slate-950 px-4 sm:px-6 py-4 sm:py-8 text-slate-100">
       <div className="mx-auto flex max-w-6xl flex-col gap-6">
-        <header className="rounded-2xl border border-slate-800 bg-slate-900/80 p-6 flex flex-row items-center justify-between gap-6">
-          <img src="/gestlock-logo.png.png" alt="Gestlock Logo" className="h-32 w-auto object-contain mix-blend-screen" />
-          <div className="flex-1 flex flex-col items-center justify-center text-center">
-            <h1 className="text-3xl font-semibold">Gestión funcional de contraseñas</h1>
+        <header className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4 sm:p-6 flex flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            {user && (
+              <button 
+                className="lg:hidden p-2 -ml-2 text-slate-400 hover:text-white"
+                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
+              </button>
+            )}
+            <img src="/gestlock-logo.png.png" alt="Gestlock Logo" className="h-8 sm:h-12 md:h-20 w-auto object-contain mix-blend-screen" />
           </div>
-          <img src="/logo.png" alt="Gestion Group Logo" className="h-20 w-auto object-contain mix-blend-screen" />
+          <div className="hidden sm:flex flex-1 flex-col items-center justify-center text-center">
+            <h1 className="text-xl md:text-3xl font-semibold">Gestión funcional de contraseñas</h1>
+          </div>
+          <img src="/logo.png" alt="Gestion Group Logo" className="h-6 sm:h-10 md:h-14 w-auto object-contain mix-blend-screen" />
         </header>
 
         {!user ? (
@@ -705,396 +721,431 @@ export default function HomePage() {
             </div>
           </section>
         ) : (
-          <section className="grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">
-            <div className="space-y-6">
-              <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm uppercase tracking-[0.3em] text-cyan-400">Sesión activa</p>
-                    <h2 className="text-xl font-semibold">{user.email}</h2>
-                  </div>
-                  <button className="rounded bg-slate-800 px-3 py-2" onClick={handleLogout}>Cerrar sesión</button>
+          <div className="flex flex-col lg:flex-row gap-6 items-start">
+            {/* Menú Lateral / Móvil */}
+            <aside className={`w-full lg:w-64 flex-shrink-0 transition-all duration-300 ${isMobileMenuOpen ? 'block' : 'hidden lg:block'}`}>
+              <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5 space-y-6 lg:sticky lg:top-6">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.2em] text-cyan-400 mb-1">Sesión activa</p>
+                  <h2 className="text-sm font-semibold truncate" title={user.email}>{user.email}</h2>
+                </div>
+                
+                <nav className="space-y-1.5">
+                  <button 
+                    onClick={() => { setActiveSection('vault'); setIsMobileMenuOpen(false); }}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${activeSection === 'vault' ? 'bg-cyan-900/40 text-cyan-300 border border-cyan-800/50' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'}`}
+                  >
+                    🔐 Mi Bóveda
+                  </button>
+                  <button 
+                    onClick={() => { setActiveSection('new-entry'); setIsMobileMenuOpen(false); }}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${activeSection === 'new-entry' ? 'bg-cyan-900/40 text-cyan-300 border border-cyan-800/50' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'}`}
+                  >
+                    ➕ Nueva Entrada
+                  </button>
+                  {user.role === 'admin' && (
+                    <>
+                      <div className="pt-4 pb-1">
+                        <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Admin</p>
+                      </div>
+                      <button 
+                        onClick={() => { setActiveSection('admin'); setIsMobileMenuOpen(false); }}
+                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${activeSection === 'admin' ? 'bg-purple-900/40 text-purple-300 border border-purple-800/50' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'}`}
+                      >
+                        🛡️ Usuarios
+                      </button>
+                      <button 
+                        onClick={() => { setActiveSection('import'); setIsMobileMenuOpen(false); }}
+                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${activeSection === 'import' ? 'bg-emerald-900/40 text-emerald-300 border border-emerald-800/50' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'}`}
+                      >
+                        📥 Importar Excel
+                      </button>
+                    </>
+                  )}
+                </nav>
+                <div className="pt-4 border-t border-slate-800">
+                  <button className="w-full rounded bg-slate-800/50 hover:bg-slate-800 px-3 py-2 text-sm text-slate-300 transition-colors" onClick={handleLogout}>
+                    Cerrar sesión
+                  </button>
                 </div>
               </div>
+            </aside>
 
-              {user.role === 'admin' ? (
-                <>
-                  <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-6">
-                    <h2 className="text-xl font-semibold">Administración</h2>
-                    <p className="mt-2 text-sm text-slate-400">Gestiona usuarios y roles desde la consola administrativa.</p>
-                    <div className="mt-4 space-y-3">
-                      {adminUsers.map((adminUser) => (
-                        <div key={adminUser.id} className="rounded border border-slate-800 bg-slate-950/70 p-3 space-y-2">
-                          <div className="flex items-center justify-between gap-3">
-                            <div>
-                              <p className="font-medium text-sm">{adminUser.email}</p>
-                              <div className="flex items-center gap-2">
-                                <p className="text-xs text-slate-400">{adminUser.mfaEnabled ? 'MFA habilitado' : 'MFA no habilitado'}</p>
-                                <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${(adminUser as any).isVerified !== false ? 'bg-emerald-900/40 text-emerald-400' : 'bg-orange-900/40 text-orange-400'}`}>
-                                  {(adminUser as any).isVerified !== false ? '✓ Verificado' : '⚠ Sin verificar'}
-                                </span>
-                              </div>
+            {/* Contenido Principal */}
+            <section className="flex-1 min-w-0 space-y-6">
+
+              {/* ---- SECCIÓN ADMIN ---- */}
+              {activeSection === 'admin' && user.role === 'admin' ? (
+                <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-6">
+                  <h2 className="text-xl font-semibold">Administración</h2>
+                  <p className="mt-2 text-sm text-slate-400">Gestiona usuarios y roles desde la consola administrativa.</p>
+                  <div className="mt-4 space-y-3">
+                    {adminUsers.map((adminUser) => (
+                      <div key={adminUser.id} className="rounded border border-slate-800 bg-slate-950/70 p-4 space-y-3">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="font-medium text-sm truncate">{adminUser.email}</p>
+                            <div className="flex flex-wrap items-center gap-2 mt-1">
+                              <p className="text-xs text-slate-400">{adminUser.mfaEnabled ? 'MFA habilitado' : 'MFA no habilitado'}</p>
+                              <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${(adminUser as any).isVerified !== false ? 'bg-emerald-900/40 text-emerald-400' : 'bg-orange-900/40 text-orange-400'}`}>
+                                {(adminUser as any).isVerified !== false ? '✓ Verificado' : '⚠ Sin verificar'}
+                              </span>
                             </div>
-                            <select
-                              className="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm"
-                              value={adminUser.role}
-                              onChange={(event) => void handleRoleChange(adminUser.id, event.target.value)}
-                            >
-                              <option value="user">user</option>
-                              <option value="auditor">auditor</option>
-                              <option value="admin">admin</option>
-                            </select>
                           </div>
-                          <div className="flex gap-2 flex-wrap">
-                            {(adminUser as any).isVerified === false && (
-                              <button
-                                className="rounded bg-emerald-900/30 hover:bg-emerald-900/60 border border-emerald-900/40 px-2 py-1 text-xs text-emerald-400 transition-colors"
-                                onClick={() => void handleVerifyUser(adminUser.id, adminUser.email)}
-                              >
-                                ✅ Verificar
-                              </button>
-                            )}
-                            <button
-                              className="flex-1 rounded bg-cyan-900/30 hover:bg-cyan-900/50 border border-cyan-900/40 px-2 py-1 text-xs text-cyan-300 transition-colors"
-                              onClick={() => void handleSendResetPassword(adminUser.id, adminUser.email)}
-                            >
-                              🔑 Restablecer contraseña
-                            </button>
-                            <button
-                              className="rounded bg-red-900/30 hover:bg-red-900/60 border border-red-900/40 px-2 py-1 text-xs text-red-400 transition-colors"
-                              onClick={() => void handleDeleteUser(adminUser.id, adminUser.email)}
-                            >
-                              🗑 Eliminar
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-6">
-                    <h2 className="text-xl font-semibold">Importar desde Excel</h2>
-                    <p className="mt-2 text-sm text-slate-400">Selecciona un archivo Excel (.xlsx, .csv) para importar contraseñas a tu bóveda de forma masiva.</p>
-                    
-                    <div className="mt-4">
-                      <input 
-                        type="file" 
-                        accept=".xlsx, .xls, .csv"
-                        className="block w-full text-sm text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-cyan-900/30 file:text-cyan-300 hover:file:bg-cyan-900/50"
-                        onChange={handleFileUpload}
-                      />
-                    </div>
-
-                    {importWorkbook && (
-                      <div className="mt-6 space-y-4">
-                        <div className="flex items-center gap-3">
-                          <label className="text-sm font-medium">Pestaña:</label>
-                          <select 
-                            className="rounded border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm"
-                            value={selectedSheet}
-                            onChange={(e) => importWorkbook && handleSheetSelect(importWorkbook, e.target.value)}
+                          <select
+                            className="w-full sm:w-auto rounded border border-slate-700 bg-slate-950 px-2 py-2 sm:py-1 text-sm"
+                            value={adminUser.role}
+                            onChange={(event) => void handleRoleChange(adminUser.id, event.target.value)}
                           >
-                            {importSheets.map(sheet => (
-                              <option key={sheet} value={sheet}>{sheet}</option>
-                            ))}
+                            <option value="user">user</option>
+                            <option value="auditor">auditor</option>
+                            <option value="admin">admin</option>
                           </select>
                         </div>
-
-                        {sheetHeaders.length > 0 && (
-                          <div className="rounded border border-slate-700 bg-slate-950 p-4">
-                            <h3 className="text-sm font-semibold mb-3">Mapeo de Columnas</h3>
-                            <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
-                              <div>
-                                <label className="block text-slate-400 text-xs mb-1">Nombre *</label>
-                                <select className="w-full rounded border border-slate-800 bg-slate-900 px-2 py-1 text-xs" value={columnMap.name} onChange={e => setColumnMap({...columnMap, name: e.target.value})}>
-                                  <option value="">-- Ignorar --</option>
-                                  {sheetHeaders.map(h => <option key={h} value={h}>{h}</option>)}
-                                </select>
-                              </div>
-                              <div>
-                                <label className="block text-slate-400 text-xs mb-1">URL</label>
-                                <select className="w-full rounded border border-slate-800 bg-slate-900 px-2 py-1 text-xs" value={columnMap.url} onChange={e => setColumnMap({...columnMap, url: e.target.value})}>
-                                  <option value="">-- Ignorar --</option>
-                                  {sheetHeaders.map(h => <option key={h} value={h}>{h}</option>)}
-                                </select>
-                              </div>
-                              <div>
-                                <label className="block text-slate-400 text-xs mb-1">Usuario</label>
-                                <select className="w-full rounded border border-slate-800 bg-slate-900 px-2 py-1 text-xs" value={columnMap.username} onChange={e => setColumnMap({...columnMap, username: e.target.value})}>
-                                  <option value="">-- Ignorar --</option>
-                                  {sheetHeaders.map(h => <option key={h} value={h}>{h}</option>)}
-                                </select>
-                              </div>
-                              <div>
-                                <label className="block text-slate-400 text-xs mb-1">Contraseña</label>
-                                <select className="w-full rounded border border-slate-800 bg-slate-900 px-2 py-1 text-xs" value={columnMap.password} onChange={e => setColumnMap({...columnMap, password: e.target.value})}>
-                                  <option value="">-- Ignorar --</option>
-                                  {sheetHeaders.map(h => <option key={h} value={h}>{h}</option>)}
-                                </select>
-                              </div>
-                              <div>
-                                <label className="block text-slate-400 text-xs mb-1">Notas</label>
-                                <select className="w-full rounded border border-slate-800 bg-slate-900 px-2 py-1 text-xs" value={columnMap.notes} onChange={e => setColumnMap({...columnMap, notes: e.target.value})}>
-                                  <option value="">-- Ignorar --</option>
-                                  {sheetHeaders.map(h => <option key={h} value={h}>{h}</option>)}
-                                </select>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-
-                        {sheetData.length > 0 && (
-                          <div className="mt-4">
-                            <div className="flex justify-between items-center mb-2">
-                              <h3 className="text-sm font-semibold">Vista Previa ({selectedRows.size} seleccionados de {sheetData.length})</h3>
-                              <button 
-                                className="text-xs text-cyan-400 hover:text-cyan-300"
-                                onClick={() => setSelectedRows(selectedRows.size === sheetData.length ? new Set() : new Set(sheetData.map((_, i) => i)))}
-                              >
-                                {selectedRows.size === sheetData.length ? 'Desmarcar todos' : 'Marcar todos'}
-                              </button>
-                            </div>
-                            <div className="max-h-60 overflow-y-auto rounded border border-slate-700 bg-slate-950">
-                              <table className="w-full text-left text-xs">
-                                <thead className="sticky top-0 bg-slate-900 shadow text-slate-400">
-                                  <tr>
-                                    <th className="p-2 w-10 text-center">✓</th>
-                                    <th className="p-2">{columnMap.name || 'Nombre'}</th>
-                                    <th className="p-2">{columnMap.username || 'Usuario'}</th>
-                                    <th className="p-2">{columnMap.password || 'Contraseña'}</th>
-                                  </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-800">
-                                  {sheetData.map((row, i) => (
-                                    <tr key={i} className="hover:bg-slate-900/50 cursor-pointer" onClick={() => handleToggleRow(i)}>
-                                      <td className="p-2 text-center" onClick={(e) => e.stopPropagation()}>
-                                        <input type="checkbox" checked={selectedRows.has(i)} onChange={() => handleToggleRow(i)} className="rounded border-slate-700 bg-slate-800" />
-                                      </td>
-                                      <td className="p-2 truncate max-w-[150px]">{row[columnMap.name] || '-'}</td>
-                                      <td className="p-2 truncate max-w-[150px]">{row[columnMap.username] || '-'}</td>
-                                      <td className="p-2 truncate max-w-[150px]">{row[columnMap.password] || '-'}</td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
-                            <button 
-                              className="mt-4 w-full rounded bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-400 hover:to-cyan-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all px-3 py-2 font-semibold shadow-lg shadow-cyan-900/20 text-white" 
-                              onClick={() => void handleImport()}
-                              disabled={isImporting || selectedRows.size === 0}
+                        <div className="flex flex-col sm:flex-row gap-2">
+                          {(adminUser as any).isVerified === false && (
+                            <button
+                              className="w-full sm:w-auto rounded bg-emerald-900/30 hover:bg-emerald-900/60 border border-emerald-900/40 px-3 py-2 sm:py-1 text-xs text-emerald-400 transition-colors"
+                              onClick={() => void handleVerifyUser(adminUser.id, adminUser.email)}
                             >
-                              {isImporting ? 'Procesando...' : `Importar ${selectedRows.size} registros`}
+                              ✅ Verificar
                             </button>
-                          </div>
-                        )}
+                          )}
+                          <button
+                            className="flex-1 w-full sm:w-auto rounded bg-cyan-900/30 hover:bg-cyan-900/50 border border-cyan-900/40 px-3 py-2 sm:py-1 text-xs text-cyan-300 transition-colors"
+                            onClick={() => void handleSendResetPassword(adminUser.id, adminUser.email)}
+                          >
+                            🔑 Restablecer contraseña
+                          </button>
+                          <button
+                            className="w-full sm:w-auto rounded bg-red-900/30 hover:bg-red-900/60 border border-red-900/40 px-3 py-2 sm:py-1 text-xs text-red-400 transition-colors"
+                            onClick={() => void handleDeleteUser(adminUser.id, adminUser.email)}
+                          >
+                            🗑 Eliminar
+                          </button>
+                        </div>
                       </div>
-                    )}
+                    ))}
                   </div>
-                </>
+                </div>
               ) : null}
 
-              <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-6">
-                <h2 className="text-xl font-semibold">Nueva entrada</h2>
-                <form className="mt-4 space-y-3" onSubmit={handleCreateEntry}>
-                  <input
-                    className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2"
-                    placeholder="Nombre de la credencial"
-                    value={entryForm.name}
-                    onChange={(event) => setEntryForm({ ...entryForm, name: event.target.value })}
-                  />
-                  <input
-                    className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2"
-                    placeholder="URL"
-                    value={entryForm.url}
-                    onChange={(event) => setEntryForm({ ...entryForm, url: event.target.value })}
-                  />
-                  <input
-                    className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2"
-                    placeholder="Usuario"
-                    value={entryForm.username}
-                    onChange={(event) => setEntryForm({ ...entryForm, username: event.target.value })}
-                  />
-                  <div className="relative">
+              {/* ---- SECCIÓN IMPORTAR ---- */}
+              {activeSection === 'import' && user.role === 'admin' ? (
+                <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-6">
+                  <h2 className="text-xl font-semibold">Importar desde Excel</h2>
+                  <p className="mt-2 text-sm text-slate-400">Selecciona un archivo Excel (.xlsx, .csv) para importar contraseñas a tu bóveda de forma masiva.</p>
+                  <div className="mt-4">
                     <input
-                      className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2"
-                      type={showEntryPassword ? 'text' : 'password'}
-                      placeholder="Contraseña"
-                      value={entryForm.password}
-                      onChange={(event) => setEntryForm({ ...entryForm, password: event.target.value })}
+                      type="file"
+                      accept=".xlsx, .xls, .csv"
+                      className="block w-full text-sm text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-cyan-900/30 file:text-cyan-300 hover:file:bg-cyan-900/50"
+                      onChange={handleFileUpload}
                     />
-                    <button
-                      type="button"
-                      className="absolute right-2 top-2 text-xs text-slate-400"
-                      onClick={() => setShowEntryPassword((prev) => !prev)}
-                    >
-                      {showEntryPassword ? 'Ocultar' : 'Mostrar'}
-                    </button>
                   </div>
-                  <textarea
-                    className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2"
-                    placeholder="Notas"
-                    rows={3}
-                    value={entryForm.notes}
-                    onChange={(event) => setEntryForm({ ...entryForm, notes: event.target.value })}
-                  />
-                  <button className="w-full rounded bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-400 hover:to-cyan-400 transition-all px-3 py-2 font-semibold shadow-lg shadow-cyan-900/20 text-white" type="submit">
-                    Guardar entrada
-                  </button>
-                </form>
-                {message ? <p className="mt-4 text-sm text-cyan-300">{message}</p> : null}
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-6">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <h2 className="text-xl font-semibold">Bóveda</h2>
-                  <p className="text-sm text-slate-400">Entradas almacenadas para este usuario</p>
-                </div>
-                <input
-                  className="w-48 rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                  placeholder="Buscar"
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                />
-              </div>
-
-              <div className="mt-4 space-y-3">
-                {entries.length === 0 ? (
-                  <p className="rounded border border-dashed border-slate-700 p-4 text-sm text-slate-400">
-                    No hay entradas aún. Crea la primera credencial desde el formulario.
-                  </p>
-                ) : (
-                  entries.map((entry) => (
-                    <article key={entry.id} className="rounded border border-slate-800 bg-slate-950/70 p-4">
-                      {editingEntryId === entry.id ? (
-                        <div className="space-y-3">
-                          <input className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-sm" placeholder="Nombre" value={editForm.name || ''} onChange={(e) => setEditForm({...editForm, name: e.target.value})} />
-                          <input className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-sm" placeholder="URL" value={editForm.url || ''} onChange={(e) => setEditForm({...editForm, url: e.target.value})} />
-                          <input className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-sm" placeholder="Usuario" value={editForm.username || ''} onChange={(e) => setEditForm({...editForm, username: e.target.value})} />
-                          <input className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-sm" placeholder="Contraseña" value={editForm.password || ''} onChange={(e) => setEditForm({...editForm, password: e.target.value})} />
-                          <textarea className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-sm" placeholder="Notas" rows={2} value={editForm.notes || ''} onChange={(e) => setEditForm({...editForm, notes: e.target.value})} />
-                          <div className="flex gap-2 mt-2">
-                            <button className="rounded bg-gradient-to-r from-teal-500 to-cyan-500 px-3 py-1.5 text-xs font-medium text-white shadow" onClick={() => saveEdit(entry.id)}>Guardar</button>
-                            <button className="rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs text-slate-300" onClick={cancelEdit}>Cancelar</button>
+                  {importWorkbook && (
+                    <div className="mt-6 space-y-4">
+                      <div className="flex items-center gap-3">
+                        <label className="text-sm font-medium">Pestaña:</label>
+                        <select
+                          className="rounded border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm"
+                          value={selectedSheet}
+                          onChange={(e) => importWorkbook && handleSheetSelect(importWorkbook, e.target.value)}
+                        >
+                          {importSheets.map(sheet => (
+                            <option key={sheet} value={sheet}>{sheet}</option>
+                          ))}
+                        </select>
+                      </div>
+                      {sheetHeaders.length > 0 && (
+                        <div className="rounded border border-slate-700 bg-slate-950 p-4">
+                          <h3 className="text-sm font-semibold mb-3">Mapeo de Columnas</h3>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 text-sm">
+                            <div>
+                              <label className="block text-slate-400 text-xs mb-1">Nombre *</label>
+                              <select className="w-full rounded border border-slate-800 bg-slate-900 px-3 py-2 sm:py-1 text-xs" value={columnMap.name} onChange={e => setColumnMap({...columnMap, name: e.target.value})}>
+                                <option value="">-- Ignorar --</option>
+                                {sheetHeaders.map(h => <option key={h} value={h}>{h}</option>)}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-slate-400 text-xs mb-1">URL</label>
+                              <select className="w-full rounded border border-slate-800 bg-slate-900 px-3 py-2 sm:py-1 text-xs" value={columnMap.url} onChange={e => setColumnMap({...columnMap, url: e.target.value})}>
+                                <option value="">-- Ignorar --</option>
+                                {sheetHeaders.map(h => <option key={h} value={h}>{h}</option>)}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-slate-400 text-xs mb-1">Usuario</label>
+                              <select className="w-full rounded border border-slate-800 bg-slate-900 px-3 py-2 sm:py-1 text-xs" value={columnMap.username} onChange={e => setColumnMap({...columnMap, username: e.target.value})}>
+                                <option value="">-- Ignorar --</option>
+                                {sheetHeaders.map(h => <option key={h} value={h}>{h}</option>)}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-slate-400 text-xs mb-1">Contraseña</label>
+                              <select className="w-full rounded border border-slate-800 bg-slate-900 px-3 py-2 sm:py-1 text-xs" value={columnMap.password} onChange={e => setColumnMap({...columnMap, password: e.target.value})}>
+                                <option value="">-- Ignorar --</option>
+                                {sheetHeaders.map(h => <option key={h} value={h}>{h}</option>)}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-slate-400 text-xs mb-1">Notas</label>
+                              <select className="w-full rounded border border-slate-800 bg-slate-900 px-3 py-2 sm:py-1 text-xs" value={columnMap.notes} onChange={e => setColumnMap({...columnMap, notes: e.target.value})}>
+                                <option value="">-- Ignorar --</option>
+                                {sheetHeaders.map(h => <option key={h} value={h}>{h}</option>)}
+                              </select>
+                            </div>
                           </div>
                         </div>
-                      ) : (
-                        <>
-                          <div className="flex items-start justify-between gap-3">
-                            <div>
-                              <h3 className="font-semibold">{entry.name}</h3>
-                              <p className="mt-1 text-sm text-slate-400">{entry.url}</p>
-                            </div>
-                            <span className="rounded bg-cyan-900/50 px-2 py-1 text-xs text-cyan-300">{entry.username}</span>
-                          </div>
-                          <p className="mt-3 text-sm text-slate-300">Usuario: {entry.username}</p>
-                          <div className="mt-1 flex items-center gap-2">
-                            <span className="text-sm text-slate-300">Contraseña:</span>
-                            <span className="font-mono text-sm tracking-wider bg-slate-900 px-2 py-0.5 rounded text-cyan-100">
-                              {visiblePasswords[entry.id] ? entry.password : '••••••••'}
-                            </span>
-                            <button 
-                              className="text-xs text-slate-400 hover:text-cyan-300 transition-colors"
-                              onClick={() => togglePassword(entry.id)}
-                              title={visiblePasswords[entry.id] ? "Ocultar" : "Mostrar"}
-                            >
-                              {visiblePasswords[entry.id] ? '🙈' : '👁️'}
-                            </button>
-                            <button 
-                              className="text-xs text-slate-400 hover:text-cyan-300 transition-colors"
-                              onClick={() => copyPassword(entry.password)}
-                              title="Copiar contraseña"
-                            >
-                              📋
-                            </button>
-                          </div>
-                          {entry.notes ? <p className="mt-1 text-sm text-slate-400">Notas: {entry.notes}</p> : null}
-                          <div className="mt-4 flex flex-wrap items-center gap-2">
-                            {user.role === 'admin' ? (
-                              <>
-                                <select
-                                  className="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm"
-                                  value={shareTargets[entry.id] ?? ''}
-                                  onChange={(event) => setShareTargets({ ...shareTargets, [entry.id]: event.target.value })}
-                                >
-                                  <option value="">Compartir con...</option>
-                                  {adminUsers.filter((adminUser) => adminUser.id !== user.id).map((adminUser) => (
-                                    <option key={adminUser.id} value={adminUser.id}>
-                                      {adminUser.email}
-                                    </option>
-                                  ))}
-                                </select>
-                                <button className="rounded bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-400 hover:to-cyan-400 px-3 py-1.5 text-sm font-medium shadow-md shadow-cyan-900/20 transition-all text-white" onClick={() => void handleShareEntry(entry.id)}>
-                                  Compartir
-                                </button>
-                              </>
-                            ) : null}
-                            {(user.role === 'admin' || user.id === entry.userId) ? (
-                              <button 
-                                className="rounded border border-slate-700 bg-slate-800 hover:bg-slate-700 px-3 py-1.5 text-sm font-medium transition-all text-slate-200"
-                                onClick={() => startEdit(entry)}
-                              >
-                                Editar
-                              </button>
-                            ) : null}
-                            {(user.role === 'admin' || user.role === 'auditor') ? (
-                              <button 
-                                className="rounded border border-slate-700 bg-slate-800 hover:bg-slate-700 px-3 py-1.5 text-sm font-medium transition-all text-slate-200"
-                                onClick={() => viewHistory(entry.id)}
-                              >
-                                {historyEntryId === entry.id ? 'Ocultar Historial' : 'Ver Historial'}
-                              </button>
-                            ) : null}
-                          </div>
-
-                          {(user.role === 'admin' || user.role === 'auditor') && historyEntryId === entry.id && (
-                            <div className="mt-4 rounded bg-slate-900 border border-slate-700 p-4">
-                              <h4 className="text-sm font-semibold mb-2 text-cyan-400">Historial de Cambios</h4>
-                              {isLoadingHistory ? (
-                                <p className="text-xs text-slate-400">Cargando...</p>
-                              ) : historyLogs.length === 0 ? (
-                                <p className="text-xs text-slate-400">No hay registros de auditoría para esta contraseña.</p>
-                              ) : (
-                                <ul className="space-y-3">
-                                  {historyLogs.map(log => {
-                                    let parsedDetails: any = {};
-                                    try {
-                                      parsedDetails = JSON.parse(log.details || '{}');
-                                    } catch(e) {}
-                                    
-                                    return (
-                                      <li key={log.id} className="text-xs border-l-2 border-slate-700 pl-3">
-                                        <div className="flex items-center justify-between text-slate-300">
-                                          <span className="font-semibold capitalize">{log.action.replace('_', ' ')}</span>
-                                          <span className="text-slate-500">{new Date(log.createdAt).toLocaleString()}</span>
-                                        </div>
-                                        <div className="text-slate-400 mt-1">
-                                          Usuario: <span className="text-slate-300">{log.user?.email || 'Sistema / Desconocido'}</span>
-                                        </div>
-                                        {parsedDetails.changes && (
-                                          <div className="text-slate-400 mt-1">
-                                            Cambios: <span className="text-cyan-300">{parsedDetails.changes}</span>
-                                          </div>
-                                        )}
-                                        <div className="text-slate-500 mt-1 text-[10px]">
-                                          IP: {log.ipAddress || 'N/A'}
-                                        </div>
-                                      </li>
-                                    );
-                                  })}
-                                </ul>
-                              )}
-                            </div>
-                          )}
-                        </>
                       )}
-                    </article>
-                  ))
-                )}
-              </div>
-            </div>
-          </section>
+                      {sheetData.length > 0 && (
+                        <div className="mt-4">
+                          <div className="flex justify-between items-center mb-2">
+                            <h3 className="text-sm font-semibold">Vista Previa ({selectedRows.size} seleccionados de {sheetData.length})</h3>
+                            <button
+                              className="text-xs text-cyan-400 hover:text-cyan-300"
+                              onClick={() => setSelectedRows(selectedRows.size === sheetData.length ? new Set() : new Set(sheetData.map((_, i) => i)))}
+                            >
+                              {selectedRows.size === sheetData.length ? 'Desmarcar todos' : 'Marcar todos'}
+                            </button>
+                          </div>
+                          <div className="max-h-60 overflow-y-auto overflow-x-auto rounded border border-slate-700 bg-slate-950">
+                            <table className="w-full text-left text-xs whitespace-nowrap min-w-[500px]">
+                              <thead className="sticky top-0 bg-slate-900 shadow text-slate-400">
+                                <tr>
+                                  <th className="p-2 w-10 text-center">✓</th>
+                                  <th className="p-2">{columnMap.name || 'Nombre'}</th>
+                                  <th className="p-2">{columnMap.username || 'Usuario'}</th>
+                                  <th className="p-2">{columnMap.password || 'Contraseña'}</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-800">
+                                {sheetData.map((row, i) => (
+                                  <tr key={i} className="hover:bg-slate-900/50 cursor-pointer" onClick={() => handleToggleRow(i)}>
+                                    <td className="p-2 text-center" onClick={(e) => e.stopPropagation()}>
+                                      <input type="checkbox" checked={selectedRows.has(i)} onChange={() => handleToggleRow(i)} className="rounded border-slate-700 bg-slate-800 h-4 w-4" />
+                                    </td>
+                                    <td className="p-2 truncate max-w-[150px] sm:max-w-xs">{row[columnMap.name] || '-'}</td>
+                                    <td className="p-2 truncate max-w-[150px] sm:max-w-xs">{row[columnMap.username] || '-'}</td>
+                                    <td className="p-2 truncate max-w-[150px] sm:max-w-xs">{row[columnMap.password] || '-'}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                          <button
+                            className="mt-4 w-full rounded bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-400 hover:to-cyan-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all px-3 py-2 font-semibold shadow-lg shadow-cyan-900/20 text-white"
+                            onClick={() => void handleImport()}
+                            disabled={isImporting || selectedRows.size === 0}
+                          >
+                            {isImporting ? 'Procesando...' : `Importar ${selectedRows.size} registros`}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : null}
+
+              {/* ---- SECCIÓN NUEVA ENTRADA ---- */}
+              {activeSection === 'new-entry' ? (
+                <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-6">
+                  <h2 className="text-xl font-semibold">Nueva entrada</h2>
+                  <form className="mt-4 space-y-3" onSubmit={handleCreateEntry}>
+                    <input
+                      className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2"
+                      placeholder="Nombre de la credencial"
+                      value={entryForm.name}
+                      onChange={(event) => setEntryForm({ ...entryForm, name: event.target.value })}
+                    />
+                    <input
+                      className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2"
+                      placeholder="URL"
+                      value={entryForm.url}
+                      onChange={(event) => setEntryForm({ ...entryForm, url: event.target.value })}
+                    />
+                    <input
+                      className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2"
+                      placeholder="Usuario / Email"
+                      value={entryForm.username}
+                      onChange={(event) => setEntryForm({ ...entryForm, username: event.target.value })}
+                    />
+                    <div className="relative">
+                      <input
+                        className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 pr-16"
+                        type={showEntryPassword ? 'text' : 'password'}
+                        placeholder="Contraseña"
+                        value={entryForm.password}
+                        onChange={(event) => setEntryForm({ ...entryForm, password: event.target.value })}
+                      />
+                      <button
+                        type="button"
+                        className="absolute right-2 top-2 text-xs text-slate-400"
+                        onClick={() => setShowEntryPassword((prev) => !prev)}
+                      >
+                        {showEntryPassword ? 'Ocultar' : 'Mostrar'}
+                      </button>
+                    </div>
+                    <textarea
+                      className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2"
+                      placeholder="Notas"
+                      rows={3}
+                      value={entryForm.notes}
+                      onChange={(event) => setEntryForm({ ...entryForm, notes: event.target.value })}
+                    />
+                    <button className="w-full rounded bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-400 hover:to-cyan-400 transition-all px-3 py-2 font-semibold shadow-lg shadow-cyan-900/20 text-white" type="submit">
+                      Guardar entrada
+                    </button>
+                  </form>
+                  {message ? <p className="mt-4 text-sm text-cyan-300">{message}</p> : null}
+                </div>
+              ) : null}
+
+              {/* ---- SECCIÓN BÓVEDA ---- */}
+              {activeSection === 'vault' ? (
+                <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-6">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                      <h2 className="text-xl font-semibold">Bóveda</h2>
+                      <p className="text-sm text-slate-400">Entradas almacenadas para este usuario</p>
+                    </div>
+                    <input
+                      className="w-full sm:w-56 rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                      placeholder="Buscar credencial..."
+                      value={search}
+                      onChange={(event) => setSearch(event.target.value)}
+                    />
+                  </div>
+                  <div className="mt-4 space-y-3">
+                    {entries.length === 0 ? (
+                      <p className="rounded border border-dashed border-slate-700 p-4 text-sm text-slate-400">
+                        No hay entradas aún. Crea la primera credencial desde el formulario.
+                      </p>
+                    ) : (
+                      entries.map((entry) => (
+                        <article key={entry.id} className="rounded border border-slate-800 bg-slate-950/70 p-4">
+                          {editingEntryId === entry.id ? (
+                            <div className="space-y-3">
+                              <input className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-sm" placeholder="Nombre" value={editForm.name || ''} onChange={(e) => setEditForm({...editForm, name: e.target.value})} />
+                              <input className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-sm" placeholder="URL" value={editForm.url || ''} onChange={(e) => setEditForm({...editForm, url: e.target.value})} />
+                              <input className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-sm" placeholder="Usuario" value={editForm.username || ''} onChange={(e) => setEditForm({...editForm, username: e.target.value})} />
+                              <input className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-sm" placeholder="Contraseña" value={editForm.password || ''} onChange={(e) => setEditForm({...editForm, password: e.target.value})} />
+                              <div className="flex gap-2">
+                                <button className="flex-1 rounded bg-gradient-to-r from-teal-500 to-cyan-500 px-3 py-1.5 text-sm font-medium text-white" onClick={() => void saveEdit(entry.id)}>Guardar</button>
+                                <button className="flex-1 rounded border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm font-medium text-slate-300" onClick={cancelEdit}>Cancelar</button>
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <h3 className="font-semibold truncate">{entry.name}</h3>
+                                  <p className="mt-1 text-sm text-slate-400 break-all">{entry.url}</p>
+                                </div>
+                                <span className="self-start sm:self-auto rounded bg-cyan-900/50 px-2 py-1 text-xs text-cyan-300 break-all">{entry.username}</span>
+                              </div>
+                              <p className="mt-3 text-sm text-slate-300 break-all">Usuario: {entry.username}</p>
+                              <div className="mt-1 flex flex-wrap items-center gap-2">
+                                <span className="text-sm text-slate-300">Contraseña:</span>
+                                <span className="font-mono text-sm tracking-wider bg-slate-900 px-2 py-0.5 rounded text-cyan-100 break-all">
+                                  {visiblePasswords[entry.id] ? entry.password : '••••••••'}
+                                </span>
+                                <button
+                                  className="p-1 sm:p-0 text-xs text-slate-400 hover:text-cyan-300 transition-colors"
+                                  onClick={() => togglePassword(entry.id)}
+                                  title={visiblePasswords[entry.id] ? "Ocultar" : "Mostrar"}
+                                >
+                                  {visiblePasswords[entry.id] ? '🙈 Ocultar' : '👁 Mostrar'}
+                                </button>
+                              </div>
+                              {entry.notes ? <p className="mt-2 text-xs text-slate-500 break-all">{entry.notes}</p> : null}
+                              <div className="mt-3 flex flex-col sm:flex-row gap-2">
+                                {user.role === 'admin' ? (
+                                  <div className="flex gap-2 flex-wrap">
+                                    <select
+                                      className="rounded border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs"
+                                      value={shareTargets[entry.id] || ''}
+                                      onChange={(e) => setShareTargets({...shareTargets, [entry.id]: e.target.value})}
+                                    >
+                                      <option value="">Compartir con...</option>
+                                      {adminUsers.filter(u => u.id !== user.id).map(u => (
+                                        <option key={u.id} value={u.id}>{u.email}</option>
+                                      ))}
+                                    </select>
+                                    <button className="w-full sm:w-auto rounded bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-400 hover:to-cyan-400 px-3 py-2 sm:py-1.5 text-sm font-medium shadow-md shadow-cyan-900/20 transition-all text-white" onClick={() => void handleShareEntry(entry.id)}>
+                                      Compartir
+                                    </button>
+                                  </div>
+                                ) : null}
+                                <div className="flex gap-2 w-full sm:w-auto mt-2 sm:mt-0">
+                                  {(user.role === 'admin' || user.id === entry.userId) ? (
+                                    <button
+                                      className="flex-1 sm:flex-none rounded border border-slate-700 bg-slate-800 hover:bg-slate-700 px-3 py-2 sm:py-1.5 text-sm font-medium transition-all text-slate-200"
+                                      onClick={() => startEdit(entry)}
+                                    >
+                                      Editar
+                                    </button>
+                                  ) : null}
+                                  {(user.role === 'admin' || user.role === 'auditor') ? (
+                                    <button
+                                      className="flex-1 sm:flex-none rounded border border-slate-700 bg-slate-800 hover:bg-slate-700 px-3 py-2 sm:py-1.5 text-sm font-medium transition-all text-slate-200"
+                                      onClick={() => viewHistory(entry.id)}
+                                    >
+                                      {historyEntryId === entry.id ? 'Ocultar Historial' : 'Ver Historial'}
+                                    </button>
+                                  ) : null}
+                                </div>
+                              </div>
+                              {(user.role === 'admin' || user.role === 'auditor') && historyEntryId === entry.id && (
+                                <div className="mt-4 rounded bg-slate-900 border border-slate-700 p-4">
+                                  <h4 className="text-sm font-semibold mb-2 text-cyan-400">Historial de Cambios</h4>
+                                  {isLoadingHistory ? (
+                                    <p className="text-xs text-slate-400">Cargando...</p>
+                                  ) : historyLogs.length === 0 ? (
+                                    <p className="text-xs text-slate-400">No hay registros de auditoría para esta contraseña.</p>
+                                  ) : (
+                                    <ul className="space-y-3">
+                                      {historyLogs.map(log => {
+                                        let parsedDetails: any = {};
+                                        try {
+                                          parsedDetails = JSON.parse(log.details || '{}');
+                                        } catch(e) {}
+                                        return (
+                                          <li key={log.id} className="text-xs border-l-2 border-slate-700 pl-3">
+                                            <div className="flex items-center justify-between text-slate-300">
+                                              <span className="font-semibold capitalize">{log.action.replace('_', ' ')}</span>
+                                              <span className="text-slate-500">{new Date(log.createdAt).toLocaleString()}</span>
+                                            </div>
+                                            <div className="text-slate-400 mt-1">
+                                              Usuario: <span className="text-slate-300">{log.user?.email || 'Sistema / Desconocido'}</span>
+                                            </div>
+                                            {parsedDetails.changes && (
+                                              <div className="text-slate-400 mt-1">
+                                                Cambios: <span className="text-cyan-300">{parsedDetails.changes}</span>
+                                              </div>
+                                            )}
+                                            <div className="text-slate-500 mt-1 text-[10px]">
+                                              IP: {log.ipAddress || 'N/A'}
+                                            </div>
+                                          </li>
+                                        );
+                                      })}
+                                    </ul>
+                                  )}
+                                </div>
+                              )}
+                            </>
+                          )}
+                        </article>
+                      ))
+                    )}
+                  </div>
+                </div>
+              ) : null}
+
+            </section>
+          </div>
         )}
       </div>
     </main>
