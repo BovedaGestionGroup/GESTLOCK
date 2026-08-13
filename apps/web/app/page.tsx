@@ -595,6 +595,37 @@ export default function HomePage() {
                   </button>
                   {message ? <p className="mt-2 text-sm text-cyan-300">{message}</p> : null}
                 </form>
+              ) : mode === 'verify' ? (
+                <form className="mt-4 space-y-4" onSubmit={handleVerifyEmail}>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      className="rounded px-3 py-2 font-medium transition-all bg-gradient-to-r from-teal-500 to-cyan-500 shadow-md shadow-cyan-900/20 text-white"
+                    >
+                      Verificar
+                    </button>
+                  </div>
+                  <p className="text-sm text-slate-300">Se ha enviado un código a <strong>{email}</strong></p>
+                  <input
+                    className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-center text-xl tracking-[0.5em] font-mono"
+                    placeholder="000000"
+                    maxLength={6}
+                    value={verificationCode}
+                    onChange={(event) => setVerificationCode(event.target.value)}
+                    autoFocus
+                  />
+                  {message ? <p className="text-sm text-red-400">{message}</p> : null}
+                  <button className="w-full rounded bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-400 hover:to-cyan-400 transition-all px-3 py-2 font-semibold shadow-lg shadow-cyan-900/20 text-white" type="submit">
+                    Verificar y continuar
+                  </button>
+                  <button
+                    type="button"
+                    className="w-full text-sm text-slate-400 hover:text-white"
+                    onClick={() => { setMode('login'); setMessage(''); }}
+                  >
+                    Volver a inicio de sesión
+                  </button>
+                </form>
               ) : (
               <form className="mt-4 space-y-4" onSubmit={handleAuth}>
                 <div className="flex gap-2">
@@ -619,43 +650,13 @@ export default function HomePage() {
                   >
                     Registrarse
                   </button>
-                  <button
-                    type="button"
-                    className={`rounded px-3 py-2 font-medium transition-all ${mode === 'verify' ? 'bg-gradient-to-r from-teal-500 to-cyan-500 shadow-md shadow-cyan-900/20 text-white' : 'hidden'}`}
-                  >
-                    Verificar
-                  </button>
                 </div>
-
-                {mode === 'verify' ? (
-                  <form className="mt-4 space-y-4" onSubmit={handleVerifyEmail}>
-                    <p className="text-sm text-slate-300">Se ha enviado un código a <strong>{email}</strong></p>
-                    <input
-                      className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-center text-xl tracking-[0.5em] font-mono"
-                      placeholder="000000"
-                      maxLength={6}
-                      value={verificationCode}
-                      onChange={(event) => setVerificationCode(event.target.value)}
-                    />
-                    <button className="w-full rounded bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-400 hover:to-cyan-400 transition-all px-3 py-2 font-semibold shadow-lg shadow-cyan-900/20 text-white" type="submit">
-                      Verificar y continuar
-                    </button>
-                    <button 
-                      type="button" 
-                      className="w-full text-sm text-slate-400 hover:text-white"
-                      onClick={() => setMode('login')}
-                    >
-                      Volver a inicio de sesión
-                    </button>
-                  </form>
-                ) : (
-                  <>
-                    <input
-                      className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2"
-                      placeholder="Correo corporativo"
-                      value={email}
-                      onChange={(event) => setEmail(event.target.value)}
-                    />
+                <input
+                  className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2"
+                  placeholder="Correo corporativo"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                />
                 <div className="relative">
                   <input
                     className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2"
@@ -693,11 +694,9 @@ export default function HomePage() {
                 <button className="w-full rounded bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-400 hover:to-cyan-400 transition-all px-3 py-2 font-semibold shadow-lg shadow-cyan-900/20 text-white" type="submit">
                   {mode === 'login' ? 'Entrar' : 'Crear cuenta'}
                 </button>
-              </>
-            )}
-          </form>
+                {message ? <p className="mt-2 text-sm text-cyan-300">{message}</p> : null}
+              </form>
               )}
-              {message && !resetToken ? <p className="mt-4 text-sm text-cyan-300">{message}</p> : null}
             </div>
 
             <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-6">
