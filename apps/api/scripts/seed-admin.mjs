@@ -1,30 +1,25 @@
 #!/usr/bin/env node
-/**
- * GESTLOCK — Script de seed seguro para crear el primer administrador
- *
- * Uso (ejecutar UNA SOLA VEZ desde la raíz del proyecto):
- *   node apps/api/scripts/seed-admin.mjs
- *
- * El script genera una contraseña aleatoria fuerte y la muestra por consola
- * UNA SOLA VEZ. Guárdala inmediatamente en un lugar seguro.
- *
- * Variables de entorno requeridas:
- *   DATABASE_URL       — Cadena de conexión a PostgreSQL
- *   ADMIN_EMAIL        — Email del administrador a crear (o se pedirá por consola)
- *
- * Ejemplo con variables de entorno:
- *   ADMIN_EMAIL=admin@miempresa.com DATABASE_URL=postgres://... node apps/api/scripts/seed-admin.mjs
- */
-
 import { PrismaClient } from '@prisma/client';
 import argon2 from 'argon2';
 import { randomBytes } from 'crypto';
 import * as readline from 'readline';
 
-const prisma = new PrismaClient();
+const RENDER_PROD_DB_URL = "postgresql://gestor_user:71K2ziq3kPgsgK6x7Uhmdxduy4ZZTXqg@dpg-d9su1r5bedkc73e92r30-a.oregon-postgres.render.com/gestor_db_z0ec";
+
+// Si se define DATABASE_URL por entorno de terminal, se usa; si no, se conecta a Render por defecto.
+const targetDbUrl = (process.env.DATABASE_URL && !process.env.DATABASE_URL.includes('127.0.0.1'))
+  ? process.env.DATABASE_URL
+  : RENDER_PROD_DB_URL;
+
+const prisma = new PrismaClient({
+  datasources: {
+    db: {
+      url: targetDbUrl,
+    },
+  },
+});
 
 function generateStrongPassword() {
-  // Genera una contraseña de 24 caracteres con letras, números y símbolos
   const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()-_=+';
   const bytes = randomBytes(24);
   return Array.from(bytes).map(b => chars[b % chars.length]).join('');
@@ -45,7 +40,8 @@ async function main() {
   console.log('║   GESTLOCK — Creación del Administrador Inicial   ║');
   console.log('╚══════════════════════════════════════════════════╝\n');
 
-  // Obtener email
+  console.log(`Conectando a base de datos: ${targetDbUrl.includes('render.com') ? 'Render (Producción)' : 'Local'}\n`);
+
   let adminEmail = process.env.ADMIN_EMAIL;
   if (!adminEmail) {
     adminEmail = await askQuestion('Email del administrador: ');
@@ -56,10 +52,12 @@ async function main() {
     process.exit(1);
   }
 
+  const normalizedEmail = adminEmail.toLowerCase().trim();
+
   // Comprobar si ya existe
-  const existing = await prisma.user.findUnique({ where: { email: adminEmail.toLowerCase().trim() } });
+  const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
   if (existing) {
-    console.error(`❌ Ya existe un usuario con el email "${adminEmail}". Abortando para no sobreescribir.`);
+    console.error(`❌ Ya existe un usuario con el email "${normalizedEmail}". Abortando para no sobreescribir.`);
     await prisma.$disconnect();
     process.exit(1);
   }
@@ -71,7 +69,7 @@ async function main() {
   // Crear el usuario admin
   const admin = await prisma.user.create({
     data: {
-      email: adminEmail.toLowerCase().trim(),
+      email: normalizedEmail,
       passwordHash,
       role: 'admin',
       isVerified: true,
