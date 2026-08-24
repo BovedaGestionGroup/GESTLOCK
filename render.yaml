@@ -27,6 +27,20 @@ services:
         fromDatabase:
           name: gestor-db
           property: connectionString
+      # ─── Secretos criptográficos ─────────────────────────────────────────────
+      # sync: false → Render obliga a introducirlos manualmente en el panel.
+      # Sus valores NUNCA se guardan en este archivo ni en el repositorio.
+      - key: JWT_SECRET
+        sync: false
+      - key: JWT_REFRESH_SECRET
+        sync: false
+      - key: VAULT_MASTER_SECRET
+        sync: false
+      # ─── URLs de la aplicación ───────────────────────────────────────────────
+      - key: FRONTEND_URL
+        value: https://gestor-web.onrender.com
+      - key: APP_URL
+        value: https://gestor-web.onrender.com
 
 databases:
   - name: gestor-db
