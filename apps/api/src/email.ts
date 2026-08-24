@@ -74,8 +74,8 @@ export async function sendPasswordResetEmail(to: string, resetUrl: string) {
           <h2 style="color:#0d9488;margin-top:0;">Restablecer contraseña</h2>
           <p>Hemos recibido una solicitud para restablecer la contraseña de tu cuenta en Gestlock.</p>
           <div style="text-align:center;margin:30px 0;">
-            <a href="${resetUrl}" style="background:linear-gradient(to right,#14b8a6,#06b6d4);color:white;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:16px;">
-              Restablecer contraseña
+            <a href="${resetUrl}" target="_blank" style="background-color:#0d9488;color:#ffffff !important;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:16px;display:inline-block;border:none;">
+              <span style="color:#ffffff !important;">Restablecer contraseña</span>
             </a>
           </div>
           <p style="color:#64748b;font-size:13px;">Este enlace expirará en 1 hora. Si no solicitaste este cambio, ignora este correo.</p>
