@@ -252,6 +252,10 @@ export default function HomePage() {
   };
 
   const openExportModal = () => {
+    if (user?.role !== 'admin' && user?.role !== 'auditor') {
+      setMessage('Solo los administradores y auditores pueden exportar la bóveda.');
+      return;
+    }
     if (!customExportPassword) {
       generateRandomExportKey();
     }
@@ -259,6 +263,10 @@ export default function HomePage() {
   };
 
   const handleExportExcel = async () => {
+    if (user?.role !== 'admin' && user?.role !== 'auditor') {
+      setMessage('Solo los administradores y auditores pueden exportar la bóveda.');
+      return;
+    }
     try {
       setIsExporting(true);
       setMessage('Generando archivo Excel (.xlsx)...');
@@ -1504,12 +1512,14 @@ export default function HomePage() {
                         value={search}
                         onChange={(event) => setSearch(event.target.value)}
                       />
-                      <button
-                        onClick={openExportModal}
-                        className="rounded bg-teal-600 hover:bg-teal-500 text-white px-3 py-2 text-sm font-semibold transition-colors flex items-center gap-2"
-                      >
-                        📥 Exportar Excel
-                      </button>
+                      {(user?.role === 'admin' || user?.role === 'auditor') && (
+                        <button
+                          onClick={openExportModal}
+                          className="rounded bg-teal-600 hover:bg-teal-500 text-white px-3 py-2 text-sm font-semibold transition-colors flex items-center gap-2"
+                        >
+                          📥 Exportar Excel
+                        </button>
+                      )}
                     </div>
                   </div>
                   <div className="mt-4 space-y-3">

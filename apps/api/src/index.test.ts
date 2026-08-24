@@ -262,26 +262,39 @@ describe('Admin user management', () => {
     expect(preservedEntries[0].name).toBe('Corporate Secret');
   });
 
-  it('exports vault to encrypted excel and logs audit export history [Phase 6]', async () => {
-    const { accessToken } = await createVerifiedUserAndLogin('export@empresa.test', 'Password123!');
+  it('restricts vault export to admin and auditor and logs audit export history [Phase 6]', async () => {
+    const { accessToken: userToken } = await createVerifiedUserAndLogin('user-export@empresa.test', 'Password123!', 'user');
+    const { accessToken: auditorToken } = await createVerifiedUserAndLogin('auditor-export@empresa.test', 'Password123!', 'auditor');
     const { accessToken: adminToken } = await createVerifiedUserAndLogin('admin-export@empresa.test', 'Password123!', 'admin');
 
     await request(app)
       .post('/vault/entries')
-      .set('Authorization', `Bearer ${accessToken}`)
+      .set('Authorization', `Bearer ${userToken}`)
       .send({ name: 'Backup Entry', url: 'https://backup.test', username: 'exportuser', password: 'ExportPass123!' });
 
-    // 1. Exportar bóveda a Excel cifrado
-    const exportRes = await request(app)
+    // 1. Usuario normal NO puede exportar
+    const blockedRes = await request(app)
       .post('/vault/export-excel')
-      .set('Authorization', `Bearer ${accessToken}`);
+      .set('Authorization', `Bearer ${userToken}`);
+    expect(blockedRes.status).toBe(403);
 
-    expect(exportRes.status).toBe(200);
-    expect(exportRes.body.tempKey).toBeDefined();
-    expect(exportRes.body.tempKey.length).toBe(16);
-    expect(exportRes.body.fileData).toBeDefined();
+    // 2. Auditor SÍ puede exportar
+    const auditorExportRes = await request(app)
+      .post('/vault/export-excel')
+      .set('Authorization', `Bearer ${auditorToken}`);
+    expect(auditorExportRes.status).toBe(200);
+    expect(auditorExportRes.body.tempKey).toBeDefined();
+    expect(auditorExportRes.body.fileData).toBeDefined();
 
-    // 2. Admin/Auditor consulta el historial de exportaciones
+    // 3. Admin SÍ puede exportar
+    const adminExportRes = await request(app)
+      .post('/vault/export-excel')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(adminExportRes.status).toBe(200);
+    expect(adminExportRes.body.tempKey).toBeDefined();
+    expect(adminExportRes.body.fileData).toBeDefined();
+
+    // 4. Admin/Auditor consulta el historial de exportaciones
     const historyRes = await request(app)
       .get('/admin/audit-logs/exports')
       .set('Authorization', `Bearer ${adminToken}`);

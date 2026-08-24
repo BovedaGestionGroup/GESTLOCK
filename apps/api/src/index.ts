@@ -983,10 +983,15 @@ app.post('/vault/export-excel', authMiddleware, async (req, res) => {
     }
 
     const actor = await prisma.user.findUnique({ where: { id: userId } });
+    if (!actor || (!hasPermission(actor.role, 'admin') && !hasPermission(actor.role, 'auditor'))) {
+      res.status(403).json({ message: 'Forbidden' });
+      return;
+    }
+
     const items = await prisma.vaultEntry.findMany({
       where: {
-        userId: actor?.role === 'admin' ? undefined : actor?.id ?? userId,
-        includeAll: actor?.role === 'admin',
+        userId: actor.role === 'admin' || actor.role === 'auditor' ? undefined : actor.id ?? userId,
+        includeAll: actor.role === 'admin' || actor.role === 'auditor',
       },
     });
 
