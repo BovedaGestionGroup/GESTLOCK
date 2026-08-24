@@ -24,7 +24,7 @@ import {
   generateVerificationCode,
   hashPassword,
 } from './auth.js';
-import { sendVerificationEmail, sendPasswordResetEmail } from './email.js';
+import { sendVerificationEmail, sendPasswordResetEmail, sendAdminResetNotificationEmail } from './email.js';
 import { prisma } from './lib/prisma.js';
 import { requireEnv } from './lib/requireEnv.js';
 
@@ -609,19 +609,37 @@ app.post('/auth/forgot-password', authRateLimit, async (req, res) => {
     }
     const normalizedEmail = email.toLowerCase().trim();
     const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
-    if (user && user.isVerified) {
-      const existing = await prisma.passwordResetRequest.findMany({
-        where: { userId: user.id, status: 'PENDING' },
-      });
-      if (existing.length === 0) {
-        await prisma.passwordResetRequest.create({
-          data: { userId: user.id, status: 'PENDING' },
+    if (user) {
+      if (user.role === 'admin') {
+        const token = randomBytes(32).toString('hex');
+        await prisma.passwordResetToken.create({
+          data: {
+            token,
+            userId: user.id,
+            expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+          },
         });
-        await createAuditLog(user.id, 'forgot_password_request', 'Password reset requested by user', {
+        const appUrl = process.env.APP_URL || 'http://localhost:3000';
+        const resetUrl = `${appUrl}#resetToken=${token}&email=${encodeURIComponent(user.email)}`;
+        await sendPasswordResetEmail(user.email, resetUrl);
+        await createAuditLog(user.id, 'admin_direct_password_reset', 'Admin requested password reset', {
           ipAddress: req.ip,
           userAgent: req.get('user-agent'),
         });
-        console.log(`[PASSWORD_RESET_REQUEST] El usuario ${user.email} ha solicitado restablecer su contraseña. Notificación enviada a info@gestiongroup.es`);
+      } else {
+        const existing = await prisma.passwordResetRequest.findMany({
+          where: { userId: user.id, status: 'PENDING' },
+        });
+        if (existing.length === 0) {
+          await prisma.passwordResetRequest.create({
+            data: { userId: user.id, status: 'PENDING' },
+          });
+          await createAuditLog(user.id, 'forgot_password_request', 'Password reset requested by user', {
+            ipAddress: req.ip,
+            userAgent: req.get('user-agent'),
+          });
+        }
+        await sendAdminResetNotificationEmail(user.email);
       }
     }
     res.json({ message: 'Si el correo está registrado, se ha enviado la solicitud de restablecimiento para revisión del administrador.' });
@@ -629,6 +647,7 @@ app.post('/auth/forgot-password', authRateLimit, async (req, res) => {
     res.status(500).json({ message: 'No se pudo procesar la solicitud' });
   }
 });
+
 
 app.get('/admin/password-requests', authMiddleware, async (req, res) => {
   try {

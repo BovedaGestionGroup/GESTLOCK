@@ -89,3 +89,33 @@ export async function sendPasswordResetEmail(to: string, resetUrl: string) {
     throw new Error(error.message);
   }
 }
+
+export async function sendAdminResetNotificationEmail(userEmail: string) {
+  if (!resend) {
+    console.log(`[DEV MODE] Mock notification to admin: User ${userEmail} requested password reset`);
+    return;
+  }
+
+  const adminEmail = 'info@gestiongroup.es';
+  const { error } = await resend.emails.send({
+    from: `Gestlock <${fromEmail}>`,
+    to: adminEmail,
+    subject: `[GESTLOCK] Solicitud de restablecimiento de contraseña: ${userEmail}`,
+    html: `
+      <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
+        ${emailHeader}
+        <div style="padding:24px;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 8px 8px;">
+          <h2 style="color:#0d9488;margin-top:0;">Solicitud de Restablecimiento</h2>
+          <p>El usuario <strong>${userEmail}</strong> ha solicitado restablecer su contraseña de acceso a Gestlock.</p>
+          <p>Para autorizar o denegar esta solicitud, inicia sesión con tu cuenta de administrador en la plataforma y revisa la sección <strong>"Solicitudes de Restablecimiento"</strong> en el panel de administración.</p>
+          ${emailFooter}
+        </div>
+      </div>
+    `,
+  });
+
+  if (error) {
+    console.error('[EMAIL ERROR] Failed to send admin notification:', error.message);
+  }
+}
+

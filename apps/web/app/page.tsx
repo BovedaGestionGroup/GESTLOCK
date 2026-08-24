@@ -127,15 +127,18 @@ export default function HomePage() {
     if (token) {
       void loadMe();
     }
-    // Handle password reset link from email
-    const params = new URLSearchParams(window.location.search);
-    const rt = params.get('resetToken');
-    const re = params.get('email');
+    // Handle password reset link from email (supports ?resetToken=... and #resetToken=...)
+    const hash = window.location.hash.startsWith('#') ? window.location.hash.slice(1) : window.location.hash;
+    const hashParams = new URLSearchParams(hash);
+    const searchParams = new URLSearchParams(window.location.search);
+    const rt = hashParams.get('resetToken') || searchParams.get('resetToken');
+    const re = hashParams.get('email') || searchParams.get('email');
     if (rt && re) {
       setResetToken(rt);
       setResetEmail(re);
       setMode('login'); // will show reset form instead
     }
+
   }, []);
 
   useEffect(() => {
