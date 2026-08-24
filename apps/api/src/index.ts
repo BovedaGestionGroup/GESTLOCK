@@ -89,21 +89,30 @@ const app = express();
 
 // [C-04] CORS restringido a orígenes de confianza explícitos.
 // Nunca usar origin:true con credentials:true (refleja cualquier origen).
+const configuredFrontend = process.env.FRONTEND_URL || 'https://gestor-web-ikec.onrender.com';
 const allowedOrigins = process.env.NODE_ENV === 'production'
   ? [
-      process.env.FRONTEND_URL ?? 'https://gestor-web.onrender.com',
+      configuredFrontend,
+      'https://gestor-web-ikec.onrender.com',
+      'https://gestor-web.onrender.com',
     ]
-  : ['http://localhost:3000', 'http://localhost:3001'];
+  : ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:4000'];
+
+const isAllowedOrigin = (origin: string): boolean => {
+  if (allowedOrigins.includes(origin)) return true;
+  if (/^https:\/\/gestor-web-[a-z0-9]+\.onrender\.com$/.test(origin)) return true;
+  return false;
+};
 
 app.use(
   cors({
     origin: (origin, callback) => {
       // Permitir peticiones sin Origin (Postman, curl en desarrollo)
       if (!origin) return callback(null, true);
-      if (allowedOrigins.includes(origin)) {
+      if (isAllowedOrigin(origin)) {
         callback(null, true);
       } else {
-        callback(new Error(`CORS: Origin "${origin}" not allowed`));
+        callback(null, false);
       }
     },
     credentials: true,
@@ -126,13 +135,15 @@ app.use((req, res, next) => {
   }
 
   // [A-06] CSP dinámica según entorno — sin localhost en producción
+  const requestOrigin = req.headers.origin;
+  const validOriginForCsp = requestOrigin && isAllowedOrigin(requestOrigin) ? requestOrigin : configuredFrontend;
   const connectSrc = process.env.NODE_ENV === 'production'
-    ? `'self' ${process.env.FRONTEND_URL ?? 'https://gestor-web.onrender.com'}`
+    ? `'self' ${validOriginForCsp} https://gestor-web-ikec.onrender.com https://gestor-web.onrender.com`
     : "'self' http://localhost:3000 http://localhost:4000";
 
   res.setHeader(
     'Content-Security-Policy',
-    `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src ${connectSrc}`,
+    `default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src ${connectSrc}`,
   );
 
   next();

@@ -38,9 +38,9 @@ services:
         sync: false
       # ─── URLs de la aplicación ───────────────────────────────────────────────
       - key: FRONTEND_URL
-        value: https://gestor-web.onrender.com
+        value: https://gestor-web-ikec.onrender.com
       - key: APP_URL
-        value: https://gestor-web.onrender.com
+        value: https://gestor-web-ikec.onrender.com
 
 databases:
   - name: gestor-db
