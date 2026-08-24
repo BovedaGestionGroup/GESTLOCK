@@ -58,6 +58,8 @@ export default function HomePage() {
   const [resetToken, setResetToken] = useState('');
   const [resetEmail, setResetEmail] = useState('');
   const [newPassword, setNewPassword] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
 
   // Estados para Importación Excel
@@ -369,6 +371,7 @@ export default function HomePage() {
       return;
     }
 
+    setIsLoading(true);
     try {
       const body = mode === 'register' ? { email: cleanEmail, password, confirmPassword } : { email: cleanEmail, password };
       const response = await fetch(`${API_BASE_URL}/auth/${mode}`, {
@@ -402,8 +405,11 @@ export default function HomePage() {
       }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Error inesperado');
+    } finally {
+      setIsLoading(false);
     }
   };
+
 
   const handleVerifyEmail = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -913,9 +919,24 @@ export default function HomePage() {
                       </button>
                     </div>
                   ) : null}
-                  <button className="w-full rounded bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-400 hover:to-cyan-400 transition-all px-3 py-2 font-semibold shadow-lg shadow-cyan-900/20 text-white" type="submit">
-                    {mode === 'login' ? 'Entrar' : 'Crear cuenta'}
+                  <button
+                    className="w-full rounded bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-400 hover:to-cyan-400 transition-all px-3 py-2 font-semibold shadow-lg shadow-cyan-900/20 text-white disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    type="submit"
+                    disabled={isLoading}
+                  >
+                    {isLoading ? (
+                      <>
+                        <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                        </svg>
+                        {mode === 'login' ? 'Entrando...' : 'Creando cuenta...'}
+                      </>
+                    ) : (
+                      mode === 'login' ? 'Entrar' : 'Crear cuenta'
+                    )}
                   </button>
+
                   {mode === 'login' && (
                     <div className="text-center pt-2">
                       <button
