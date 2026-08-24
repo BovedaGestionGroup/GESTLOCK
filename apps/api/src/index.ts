@@ -1284,9 +1284,14 @@ app.delete('/vault/entries/:id', authMiddleware, async (req, res) => {
 
 if (process.env.NODE_ENV !== 'test') {
   const port = process.env.PORT ? Number(process.env.PORT) : 4000;
-  app.listen(port, () => {
+  const server = app.listen(port, () => {
     console.log(`API listening on port ${port}`);
   });
+
+  // Cortar conexiones que no respondan en 30s para evitar acumulación en el cliente
+  server.setTimeout(30_000);
+  server.keepAliveTimeout = 65_000; // > 60s de Render para evitar 502 por keepalive
+  server.headersTimeout = 66_000;
 }
 
 export { app };
