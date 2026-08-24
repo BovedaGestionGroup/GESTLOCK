@@ -35,7 +35,7 @@ export default function HomePage() {
   const [activeSection, setActiveSection] = useState<Section>('vault');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  const [mode, setMode] = useState<'login' | 'register' | 'verify'>('login');
+  const [mode, setMode] = useState<'login' | 'register' | 'verify' | 'forgot'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [user, setUser] = useState<User | null>(null);
@@ -142,9 +142,14 @@ export default function HomePage() {
     }
   }, [user, search]);
 
-  const loadAdminUsers = async () => {
+  const [adminSearch, setAdminSearch] = useState('');
+
+  const loadAdminUsers = async (query = adminSearch) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/admin/users`, {
+      const url = query.trim()
+        ? `${API_BASE_URL}/admin/users?search=${encodeURIComponent(query.trim())}`
+        : `${API_BASE_URL}/admin/users`;
+      const response = await fetch(url, {
         headers: getAuthHeaders(),
       });
       if (!response.ok) {
@@ -157,17 +162,207 @@ export default function HomePage() {
     }
   };
 
+  const [pendingResetRequests, setPendingResetRequests] = useState<any[]>([]);
+
+  const loadPendingResetRequests = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/admin/password-requests`, {
+        headers: getAuthHeaders(),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setPendingResetRequests(data.requests || []);
+      }
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const handleApproveReset = async (id: string) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/admin/password-requests/${id}/approve`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+      });
+      const data = await response.json();
+      setMessage(data.message);
+      await loadPendingResetRequests();
+    } catch (error) {
+      setMessage('Error al aprobar la solicitud');
+    }
+  };
+
+  const handleRejectReset = async (id: string) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/admin/password-requests/${id}/reject`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+      });
+      const data = await response.json();
+      setMessage(data.message);
+      await loadPendingResetRequests();
+    } catch (error) {
+      setMessage('Error al rechazar la solicitud');
+    }
+  };
+
+  const handleToggleUserStatus = async (targetId: string, currentStatus: boolean) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/admin/users/${targetId}/status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ isActive: !currentStatus }),
+      });
+      if (response.ok) {
+        setMessage(`Estado del usuario actualizado correctamente`);
+        await loadAdminUsers(adminSearch);
+      }
+    } catch (error) {
+      setMessage('Error al actualizar estado');
+    }
+  };
+
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [exportWithPassword, setExportWithPassword] = useState(true);
+  const [customExportPassword, setCustomExportPassword] = useState('');
+  const [showExportPassword, setShowExportPassword] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportSuccessInfo, setExportSuccessInfo] = useState<{
+    key: string | null;
+    filename: string;
+    isEncrypted: boolean;
+  } | null>(null);
+  const [copiedExportKey, setCopiedExportKey] = useState(false);
+  const [exportLogs, setExportLogs] = useState<any[]>([]);
+
+  const generateRandomExportKey = () => {
+    const chars = 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789!@#$%';
+    let result = '';
+    const array = new Uint8Array(16);
+    crypto.getRandomValues(array);
+    for (let i = 0; i < 16; i++) {
+      result += chars[array[i] % chars.length];
+    }
+    setCustomExportPassword(result);
+  };
+
+  const openExportModal = () => {
+    if (!customExportPassword) {
+      generateRandomExportKey();
+    }
+    setIsExportModalOpen(true);
+  };
+
+  const handleExportExcel = async () => {
+    try {
+      setIsExporting(true);
+      setMessage('Generando archivo Excel (.xlsx)...');
+
+      const payload: { password?: string; encrypt?: boolean } = {};
+      if (exportWithPassword) {
+        if (customExportPassword.trim()) {
+          payload.password = customExportPassword.trim();
+        }
+      } else {
+        payload.password = '';
+        payload.encrypt = false;
+      }
+
+      const response = await fetch(`${API_BASE_URL}/vault/export-excel`, {
+        method: 'POST',
+        headers: {
+          ...getAuthHeaders(),
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        throw new Error('Error al generar la exportación');
+      }
+
+      const data = await response.json();
+      const rawB64 = data.fileBase64 || data.fileData;
+      const binaryString = window.atob(rawB64);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+
+      const blob = new Blob([bytes], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+      const downloadUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = downloadUrl;
+      a.download = data.filename || 'boveda_gestlock.xlsx';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(downloadUrl);
+
+      setIsExportModalOpen(false);
+      setExportSuccessInfo({
+        key: data.tempKey,
+        filename: data.filename || 'boveda_gestlock.xlsx',
+        isEncrypted: Boolean(data.tempKey),
+      });
+      setMessage('Archivo Excel descargado con éxito.');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Error al exportar');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const loadExportLogs = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/admin/audit-logs/exports`, {
+        headers: getAuthHeaders(),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setExportLogs(data.logs || []);
+      }
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/forgot-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      const data = await response.json();
+      setMessage(data.message);
+    } catch (error) {
+      setMessage('Error al procesar la solicitud');
+    }
+  };
+
   useEffect(() => {
-    if (user?.role === 'admin') {
-      void loadAdminUsers();
+    if (user?.role === 'admin' || user?.role === 'auditor') {
+      if (user?.role === 'admin') {
+        void loadAdminUsers(adminSearch);
+        void loadPendingResetRequests();
+      }
+      void loadExportLogs();
     } else {
       setAdminUsers([]);
+      setPendingResetRequests([]);
+      setExportLogs([]);
     }
-  }, [user]);
+  }, [user, adminSearch]);
 
   const handleAuth = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setMessage('');
+
+    const cleanEmail = email.trim().toLowerCase();
 
     if (mode === 'register' && password !== confirmPassword) {
       setMessage('Las contraseñas no coinciden');
@@ -175,7 +370,7 @@ export default function HomePage() {
     }
 
     try {
-      const body = mode === 'register' ? { email, password, confirmPassword } : { email, password };
+      const body = mode === 'register' ? { email: cleanEmail, password, confirmPassword } : { email: cleanEmail, password };
       const response = await fetch(`${API_BASE_URL}/auth/${mode}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -184,12 +379,13 @@ export default function HomePage() {
 
       const data = await response.json();
       if (!response.ok) {
-        if (response.status === 403 && data.message.includes('not verified')) {
+        const errorMsg = data.message || 'Error de autenticación';
+        if (response.status === 403 && (errorMsg.includes('no verificado') || errorMsg.includes('not verified') || errorMsg.includes('verificación'))) {
           setMode('verify');
-          setMessage('Por favor, introduce el código de verificación que enviamos a tu correo.');
+          setMessage('Tu cuenta aún no está verificada. Por favor, introduce el código de 6 dígitos que enviamos a tu correo.');
           return;
         }
-        throw new Error(data.message || 'Error de autenticación');
+        throw new Error(errorMsg);
       }
 
       if (mode === 'register') {
@@ -608,14 +804,6 @@ export default function HomePage() {
                 </form>
               ) : mode === 'verify' ? (
                 <form className="mt-4 space-y-4" onSubmit={handleVerifyEmail}>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      className="rounded px-3 py-2 font-medium transition-all bg-gradient-to-r from-teal-500 to-cyan-500 shadow-md shadow-cyan-900/20 text-white"
-                    >
-                      Verificar
-                    </button>
-                  </div>
                   <p className="text-sm text-slate-300">Se ha enviado un código a <strong>{email}</strong></p>
                   <input
                     className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-center text-xl tracking-[0.5em] font-mono"
@@ -637,61 +825,67 @@ export default function HomePage() {
                     Volver a inicio de sesión
                   </button>
                 </form>
-              ) : (
-              <form className="mt-4 space-y-4" onSubmit={handleAuth}>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    className={`rounded px-3 py-2 font-medium transition-all ${mode === 'login' ? 'bg-gradient-to-r from-teal-500 to-cyan-500 shadow-md shadow-cyan-900/20 text-white' : 'bg-slate-800 hover:bg-slate-700'}`}
-                    onClick={() => {
-                      setMode('login');
-                      setConfirmPassword('');
-                      setMessage('');
-                    }}
-                  >
-                    Iniciar sesión
-                  </button>
-                  <button
-                    type="button"
-                    className={`rounded px-3 py-2 font-medium transition-all ${mode === 'register' ? 'bg-gradient-to-r from-teal-500 to-cyan-500 shadow-md shadow-cyan-900/20 text-white' : 'bg-slate-800 hover:bg-slate-700'}`}
-                    onClick={() => {
-                      setMode('register');
-                      setMessage('');
-                    }}
-                  >
-                    Registrarse
-                  </button>
-                </div>
-                <input
-                  className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2"
-                  placeholder="Correo corporativo"
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                />
-                <div className="relative">
+              ) : mode === 'forgot' ? (
+                <form className="mt-4 space-y-4" onSubmit={handleForgotPassword}>
+                  <p className="text-sm text-slate-300">Introduce tu correo corporativo. El administrador revisará y aprobará tu solicitud para enviarte un enlace de restablecimiento.</p>
                   <input
                     className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2"
-                    type={showPassword ? 'text' : 'password'}
-                    placeholder="Contraseña"
-                    value={password}
-                    onChange={(event) => setPassword(event.target.value)}
+                    type="email"
+                    placeholder="Correo corporativo"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
                   />
+                  <button className="w-full rounded bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-400 hover:to-cyan-400 transition-all px-3 py-2 font-semibold shadow-lg shadow-cyan-900/20 text-white" type="submit">
+                    Solicitar restablecimiento
+                  </button>
+                  {message ? <p className="mt-2 text-sm text-cyan-300">{message}</p> : null}
                   <button
                     type="button"
-                    className="absolute right-2 top-2 text-xs text-slate-400"
-                    onClick={() => setShowPassword((prev) => !prev)}
+                    className="w-full text-sm text-slate-400 hover:text-white"
+                    onClick={() => { setMode('login'); setMessage(''); }}
                   >
-                    {showPassword ? 'Ocultar' : 'Mostrar'}
+                    Volver a inicio de sesión
                   </button>
-                </div>
-                {mode === 'register' ? (
+                </form>
+              ) : (
+                <form className="mt-4 space-y-4" onSubmit={handleAuth}>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      className={`rounded px-3 py-2 font-medium transition-all ${mode === 'login' ? 'bg-gradient-to-r from-teal-500 to-cyan-500 shadow-md shadow-cyan-900/20 text-white' : 'bg-slate-800 hover:bg-slate-700'}`}
+                      onClick={() => {
+                        setMode('login');
+                        setConfirmPassword('');
+                        setMessage('');
+                      }}
+                    >
+                      Iniciar sesión
+                    </button>
+                    <button
+                      type="button"
+                      className={`rounded px-3 py-2 font-medium transition-all ${mode === 'register' ? 'bg-gradient-to-r from-teal-500 to-cyan-500 shadow-md shadow-cyan-900/20 text-white' : 'bg-slate-800 hover:bg-slate-700'}`}
+                      onClick={() => {
+                        setMode('register');
+                        setMessage('');
+                      }}
+                    >
+                      Registrarse
+                    </button>
+                  </div>
+                  <input
+                    className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2"
+                    placeholder="Correo corporativo"
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                  />
                   <div className="relative">
                     <input
                       className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2"
                       type={showPassword ? 'text' : 'password'}
-                      placeholder="Repetir contraseña"
-                      value={confirmPassword}
-                      onChange={(event) => setConfirmPassword(event.target.value)}
+                      placeholder="Contraseña"
+                      value={password}
+                      onChange={(event) => setPassword(event.target.value)}
                     />
                     <button
                       type="button"
@@ -701,12 +895,40 @@ export default function HomePage() {
                       {showPassword ? 'Ocultar' : 'Mostrar'}
                     </button>
                   </div>
-                ) : null}
-                <button className="w-full rounded bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-400 hover:to-cyan-400 transition-all px-3 py-2 font-semibold shadow-lg shadow-cyan-900/20 text-white" type="submit">
-                  {mode === 'login' ? 'Entrar' : 'Crear cuenta'}
-                </button>
-                {message ? <p className="mt-2 text-sm text-cyan-300">{message}</p> : null}
-              </form>
+                  {mode === 'register' ? (
+                    <div className="relative">
+                      <input
+                        className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2"
+                        type={showPassword ? 'text' : 'password'}
+                        placeholder="Repetir contraseña"
+                        value={confirmPassword}
+                        onChange={(event) => setConfirmPassword(event.target.value)}
+                      />
+                      <button
+                        type="button"
+                        className="absolute right-2 top-2 text-xs text-slate-400"
+                        onClick={() => setShowPassword((prev) => !prev)}
+                      >
+                        {showPassword ? 'Ocultar' : 'Mostrar'}
+                      </button>
+                    </div>
+                  ) : null}
+                  <button className="w-full rounded bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-400 hover:to-cyan-400 transition-all px-3 py-2 font-semibold shadow-lg shadow-cyan-900/20 text-white" type="submit">
+                    {mode === 'login' ? 'Entrar' : 'Crear cuenta'}
+                  </button>
+                  {mode === 'login' && (
+                    <div className="text-center pt-2">
+                      <button
+                        type="button"
+                        className="text-xs text-cyan-400 hover:underline"
+                        onClick={() => { setMode('forgot' as any); setMessage(''); }}
+                      >
+                        ¿Olvidaste tu contraseña?
+                      </button>
+                    </div>
+                  )}
+                  {message ? <p className="mt-2 text-sm text-cyan-300">{message}</p> : null}
+                </form>
               )}
             </div>
 
@@ -776,9 +998,61 @@ export default function HomePage() {
 
               {/* ---- SECCIÓN ADMIN ---- */}
               {activeSection === 'admin' && user.role === 'admin' ? (
-                <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-6">
-                  <h2 className="text-xl font-semibold">Administración</h2>
-                  <p className="mt-2 text-sm text-slate-400">Gestiona usuarios y roles desde la consola administrativa.</p>
+                <div className="space-y-6">
+                  {/* Solicitudes de recuperación de contraseña pendientes (Fase 4) */}
+                  {pendingResetRequests.length > 0 && (
+                    <div className="rounded-2xl border border-amber-800/60 bg-amber-950/30 p-6">
+                      <h3 className="text-lg font-semibold text-amber-300 flex items-center gap-2">
+                        🔑 Solicitudes de Recuperación de Contraseña ({pendingResetRequests.length})
+                      </h3>
+                      <p className="mt-1 text-sm text-slate-400">Usuarios que han solicitado restablecer su contraseña.</p>
+                      <div className="mt-4 space-y-3">
+                        {pendingResetRequests.map((req) => (
+                          <div key={req.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded border border-amber-900/50 bg-slate-950/80 p-4">
+                            <div>
+                              <p className="font-medium text-sm text-slate-200">{req.user?.email || 'Usuario'}</p>
+                              <p className="text-xs text-slate-500">Solicitado: {new Date(req.requestedAt).toLocaleString()}</p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => handleApproveReset(req.id)}
+                                className="rounded bg-emerald-600 hover:bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-white transition-colors"
+                              >
+                                Aprobar
+                              </button>
+                              <button
+                                onClick={() => handleRejectReset(req.id)}
+                                className="rounded bg-rose-600 hover:bg-rose-500 px-3 py-1.5 text-xs font-semibold text-white transition-colors"
+                              >
+                                Rechazar
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-6">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                      <h2 className="text-xl font-semibold">Administración</h2>
+                      <p className="mt-1 text-sm text-slate-400">Gestiona usuarios y roles desde la consola administrativa.</p>
+                    </div>
+                    {/* Buscador de Usuarios */}
+                    <div className="relative min-w-[240px]">
+                      <input
+                        type="text"
+                        placeholder="Buscar por email o rol..."
+                        value={adminSearch}
+                        onChange={(e) => setAdminSearch(e.target.value)}
+                        className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 pl-9 text-sm text-white placeholder-slate-500 focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500"
+                      />
+                      <svg className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                      </svg>
+                    </div>
+                  </div>
                   <div className="mt-4 space-y-3">
                     {adminUsers.map((adminUser) => (
                       <div key={adminUser.id} className="rounded border border-slate-800 bg-slate-950/70 p-4 space-y-3">
@@ -818,6 +1092,12 @@ export default function HomePage() {
                             🔑 Restablecer contraseña
                           </button>
                           <button
+                            className={`w-full sm:w-auto rounded border px-3 py-2 sm:py-1 text-xs transition-colors ${(adminUser as any).isActive === false ? 'bg-emerald-900/30 hover:bg-emerald-900/60 border-emerald-900/40 text-emerald-400' : 'bg-amber-900/30 hover:bg-amber-900/60 border-amber-900/40 text-amber-400'}`}
+                            onClick={() => void handleToggleUserStatus(adminUser.id, (adminUser as any).isActive !== false)}
+                          >
+                            {(adminUser as any).isActive === false ? '▶ Activar' : '⏸ Desactivar'}
+                          </button>
+                          <button
                             className="w-full sm:w-auto rounded bg-red-900/30 hover:bg-red-900/60 border border-red-900/40 px-3 py-2 sm:py-1 text-xs text-red-400 transition-colors"
                             onClick={() => void handleDeleteUser(adminUser.id, adminUser.email)}
                           >
@@ -827,6 +1107,35 @@ export default function HomePage() {
                       </div>
                     ))}
                   </div>
+                </div>
+
+                {/* Historial de Exportaciones a Excel (Fase 6) */}
+                <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-6">
+                  <h3 className="text-lg font-semibold flex items-center gap-2">
+                    📊 Historial de Exportaciones a Excel
+                  </h3>
+                  <p className="mt-1 text-sm text-slate-400">Registro de descargas de backups cifrados con dirección IP y usuario.</p>
+                  <div className="mt-4 space-y-3">
+                    {exportLogs.length === 0 ? (
+                      <p className="text-sm text-slate-500 italic">No se han registrado exportaciones aún.</p>
+                    ) : (
+                      exportLogs.map((log) => (
+                        <div key={log.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded border border-slate-800 bg-slate-950/70 p-4">
+                          <div>
+                            <p className="font-medium text-sm text-slate-200">{log.user?.email || 'Usuario'}</p>
+                            <p className="text-xs text-slate-400 mt-0.5">{log.details}</p>
+                          </div>
+                          <div className="text-right">
+                            <span className="inline-block rounded bg-teal-900/40 border border-teal-800/50 px-2 py-0.5 text-xs text-teal-300 font-mono">
+                              IP: {log.ipAddress || 'Desconocida'}
+                            </span>
+                            <p className="text-xs text-slate-500 mt-1">{new Date(log.createdAt).toLocaleString('es-ES')}</p>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
                 </div>
               ) : null}
 
@@ -1004,18 +1313,180 @@ export default function HomePage() {
 
               {/* ---- SECCIÓN BÓVEDA ---- */}
               {activeSection === 'vault' ? (
-                <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-6">
+                <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-6 space-y-6">
+                  {/* Modal de Configuración de Exportación Excel */}
+                  {isExportModalOpen && (
+                    <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
+                      <div className="bg-slate-900 border border-teal-500/40 rounded-2xl p-6 max-w-lg w-full space-y-5 shadow-2xl">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3 text-teal-400">
+                            <span className="text-2xl">📊</span>
+                            <h3 className="text-lg font-bold text-white">Exportar Bóveda a Excel (.xlsx)</h3>
+                          </div>
+                          <button
+                            onClick={() => setIsExportModalOpen(false)}
+                            className="text-slate-400 hover:text-white transition-colors"
+                          >
+                            ✕
+                          </button>
+                        </div>
+
+                        <p className="text-sm text-slate-300">
+                          Descarga una copia completa de tus contraseñas en formato nativo <strong>Microsoft Excel (.xlsx)</strong>.
+                        </p>
+
+                        <div className="rounded-xl border border-slate-800 bg-slate-950/80 p-4 space-y-4">
+                          <label className="flex items-center gap-3 cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={exportWithPassword}
+                              onChange={(e) => setExportWithPassword(e.target.checked)}
+                              className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-teal-500 focus:ring-teal-500"
+                            />
+                            <span className="text-sm font-medium text-slate-200">
+                              🔒 Proteger archivo con contraseña (Recomendado)
+                            </span>
+                          </label>
+
+                          {exportWithPassword ? (
+                            <div className="space-y-3 pt-2 border-t border-slate-800/80">
+                              <div className="flex items-center justify-between">
+                                <label className="text-xs font-semibold text-slate-400">
+                                  Contraseña de apertura del archivo Excel:
+                                </label>
+                                <button
+                                  type="button"
+                                  onClick={generateRandomExportKey}
+                                  className="text-xs text-teal-400 hover:text-teal-300 transition-colors font-medium flex items-center gap-1"
+                                >
+                                  🎲 Generar clave aleatoria
+                                </button>
+                              </div>
+
+                              <div className="relative">
+                                <input
+                                  type={showExportPassword ? 'text' : 'password'}
+                                  value={customExportPassword}
+                                  onChange={(e) => setCustomExportPassword(e.target.value)}
+                                  placeholder="Escribe o genera una clave..."
+                                  className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2.5 text-sm text-white pr-20 font-mono focus:border-teal-500 focus:outline-none"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => setShowExportPassword(!showExportPassword)}
+                                  className="absolute right-3 top-2.5 text-xs text-slate-400 hover:text-slate-200"
+                                >
+                                  {showExportPassword ? 'Ocultar' : 'Ver'}
+                                </button>
+                              </div>
+
+                              <p className="text-xs text-slate-400 bg-slate-900/50 p-2.5 rounded-lg border border-slate-800">
+                                💡 <strong>¿Cómo funciona?</strong> Al abrir el archivo descargado en Microsoft Excel, LibreOffice o tu visor de hojas de cálculo, se te solicitará esta contraseña para desbloquear el contenido.
+                              </p>
+                            </div>
+                          ) : (
+                            <div className="p-3 rounded-lg bg-amber-950/40 border border-amber-900/50 text-xs text-amber-300">
+                              ⚠️ <strong>Aviso:</strong> El archivo se descargará en formato Excel estándar sin contraseña. Cualquiera con acceso al archivo podrá ver las credenciales.
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex gap-3 pt-2">
+                          <button
+                            type="button"
+                            onClick={() => setIsExportModalOpen(false)}
+                            className="flex-1 rounded-lg border border-slate-700 hover:bg-slate-800 py-2.5 text-sm font-medium text-slate-300 transition-colors"
+                          >
+                            Cancelar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleExportExcel}
+                            disabled={isExporting || (exportWithPassword && !customExportPassword.trim())}
+                            className="flex-1 rounded-lg bg-teal-600 hover:bg-teal-500 disabled:opacity-50 text-white py-2.5 text-sm font-semibold transition-colors flex items-center justify-center gap-2"
+                          >
+                            {isExporting ? (
+                              <>⏳ Generando Excel...</>
+                            ) : (
+                              <>📥 Descargar Excel (.xlsx)</>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Modal de Éxito con visualización de la clave de apertura */}
+                  {exportSuccessInfo && (
+                    <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
+                      <div className="bg-slate-900 border border-emerald-500/50 rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl">
+                        <div className="flex items-center gap-3 text-emerald-400">
+                          <span className="text-2xl">✅</span>
+                          <h3 className="text-lg font-bold text-white">¡Excel Descargado con Éxito!</h3>
+                        </div>
+
+                        <p className="text-sm text-slate-300">
+                          Se ha guardado <strong className="text-teal-300">{exportSuccessInfo.filename}</strong> en tu equipo.
+                        </p>
+
+                        {exportSuccessInfo.isEncrypted && exportSuccessInfo.key && (
+                          <div className="space-y-3">
+                            <p className="text-xs text-slate-400 font-medium">
+                              Contraseña necesaria para abrir tu archivo en Excel:
+                            </p>
+                            <div className="flex items-center gap-2 rounded-xl bg-slate-950 border border-teal-500/40 p-3">
+                              <code className="text-lg font-mono tracking-wider text-teal-300 font-bold flex-1 select-all break-all">
+                                {exportSuccessInfo.key}
+                              </code>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (exportSuccessInfo.key) {
+                                    navigator.clipboard.writeText(exportSuccessInfo.key);
+                                    setCopiedExportKey(true);
+                                    setTimeout(() => setCopiedExportKey(false), 2500);
+                                  }
+                                }}
+                                className="rounded-lg bg-teal-600 hover:bg-teal-500 px-3 py-1.5 text-xs font-semibold text-white transition-colors"
+                              >
+                                {copiedExportKey ? '✓ ¡Copiada!' : '📋 Copiar'}
+                              </button>
+                            </div>
+                            <p className="text-xs text-slate-400 bg-slate-950/60 p-3 rounded-lg border border-slate-800">
+                              📄 <strong>Instrucciones:</strong> Haz doble clic en el archivo <strong>.xlsx</strong> descargado. Cuando Microsoft Excel te solicite la clave, introduce la contraseña indicada arriba.
+                            </p>
+                          </div>
+                        )}
+
+                        <button
+                          onClick={() => setExportSuccessInfo(null)}
+                          className="w-full rounded-lg bg-teal-600 hover:bg-teal-500 text-white py-2.5 font-semibold transition-colors mt-2"
+                        >
+                          Entendido y Cerrar
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
                       <h2 className="text-xl font-semibold">Bóveda</h2>
                       <p className="text-sm text-slate-400">Entradas almacenadas para este usuario</p>
                     </div>
-                    <input
-                      className="w-full sm:w-56 rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                      placeholder="Buscar credencial..."
-                      value={search}
-                      onChange={(event) => setSearch(event.target.value)}
-                    />
+                    <div className="flex flex-wrap items-center gap-3">
+                      <input
+                        className="w-full sm:w-56 rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                        placeholder="Buscar credencial..."
+                        value={search}
+                        onChange={(event) => setSearch(event.target.value)}
+                      />
+                      <button
+                        onClick={openExportModal}
+                        className="rounded bg-teal-600 hover:bg-teal-500 text-white px-3 py-2 text-sm font-semibold transition-colors flex items-center gap-2"
+                      >
+                        📥 Exportar Excel
+                      </button>
+                    </div>
                   </div>
                   <div className="mt-4 space-y-3">
                     {entries.length === 0 ? (

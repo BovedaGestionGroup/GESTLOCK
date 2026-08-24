@@ -183,6 +183,113 @@ describe('Admin user management', () => {
 
     expect(listResponse.status).toBe(403);
   });
+
+  it('filters admin users by search query (email or role)', async () => {
+    const { accessToken: adminToken } = await createVerifiedUserAndLogin('admin-search@empresa.test', 'Password123!', 'admin');
+    await createVerifiedUserAndLogin('dev-alpha@empresa.test', 'Password123!', 'user');
+    await createVerifiedUserAndLogin('auditor-beta@empresa.test', 'Password123!', 'auditor');
+
+    const searchRes = await request(app)
+      .get('/admin/users?search=alpha')
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(searchRes.status).toBe(200);
+    expect(searchRes.body.users).toHaveLength(1);
+    expect(searchRes.body.users[0].email).toBe('dev-alpha@empresa.test');
+  });
+
+  it('handles password reset request creation and admin approval/rejection [Phase 4]', async () => {
+    const { accessToken: adminToken } = await createVerifiedUserAndLogin('admin-reset@empresa.test', 'Password123!', 'admin');
+    await createVerifiedUserAndLogin('user-forgot@empresa.test', 'Password123!', 'user');
+
+    // 1. Solicitud por usuario
+    const forgotRes = await request(app)
+      .post('/auth/forgot-password')
+      .send({ email: 'user-forgot@empresa.test' });
+    expect(forgotRes.status).toBe(200);
+
+    // 2. Admin consulta solicitudes pendientes
+    const reqListRes = await request(app)
+      .get('/admin/password-requests')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(reqListRes.status).toBe(200);
+    expect(reqListRes.body.requests).toHaveLength(1);
+    expect(reqListRes.body.requests[0].user.email).toBe('user-forgot@empresa.test');
+
+    const requestId = reqListRes.body.requests[0].id;
+
+    // 3. Admin aprueba la solicitud
+    const approveRes = await request(app)
+      .post(`/admin/password-requests/${requestId}/approve`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(approveRes.status).toBe(200);
+  });
+
+  it('reassigns vault entries on deletion and blocks login when deactivated [Phase 5]', async () => {
+    const { accessToken: adminToken } = await createVerifiedUserAndLogin('admin-preserve@empresa.test', 'Password123!', 'admin');
+    const { accessToken: userToken } = await createVerifiedUserAndLogin('user-preserve@empresa.test', 'Password123!', 'user');
+
+    const adminDb = await prisma.user.findUnique({ where: { email: 'admin-preserve@empresa.test' } });
+    const userDb = await prisma.user.findUnique({ where: { email: 'user-preserve@empresa.test' } });
+
+    // Usuario crea una entrada de bóveda
+    await request(app)
+      .post('/vault/entries')
+      .set('Authorization', `Bearer ${userToken}`)
+      .send({ name: 'Corporate Secret', url: 'https://corp.test', username: 'user', password: 'SecretPassword123!' });
+
+    // 1. Admin desactiva usuario
+    const deactivateRes = await request(app)
+      .put(`/admin/users/${userDb?.id}/status`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ isActive: false });
+    expect(deactivateRes.status).toBe(200);
+
+    // Intentar login con cuenta desactivada -> 403
+    const loginAttempt = await request(app)
+      .post('/auth/login')
+      .send({ email: 'user-preserve@empresa.test', password: 'Password123!' });
+    expect(loginAttempt.status).toBe(403);
+
+    // 2. Admin elimina usuario -> la entrada se reasigna al admin
+    const deleteRes = await request(app)
+      .delete(`/admin/users/${userDb?.id}`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(deleteRes.status).toBe(200);
+
+    const preservedEntries = await prisma.vaultEntry.findMany({ where: { userId: adminDb?.id } });
+    expect(preservedEntries.length).toBeGreaterThan(0);
+    expect(preservedEntries[0].name).toBe('Corporate Secret');
+  });
+
+  it('exports vault to encrypted excel and logs audit export history [Phase 6]', async () => {
+    const { accessToken } = await createVerifiedUserAndLogin('export@empresa.test', 'Password123!');
+    const { accessToken: adminToken } = await createVerifiedUserAndLogin('admin-export@empresa.test', 'Password123!', 'admin');
+
+    await request(app)
+      .post('/vault/entries')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ name: 'Backup Entry', url: 'https://backup.test', username: 'exportuser', password: 'ExportPass123!' });
+
+    // 1. Exportar bóveda a Excel cifrado
+    const exportRes = await request(app)
+      .post('/vault/export-excel')
+      .set('Authorization', `Bearer ${accessToken}`);
+
+    expect(exportRes.status).toBe(200);
+    expect(exportRes.body.tempKey).toBeDefined();
+    expect(exportRes.body.tempKey.length).toBe(16);
+    expect(exportRes.body.fileData).toBeDefined();
+
+    // 2. Admin/Auditor consulta el historial de exportaciones
+    const historyRes = await request(app)
+      .get('/admin/audit-logs/exports')
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(historyRes.status).toBe(200);
+    expect(historyRes.body.logs.length).toBeGreaterThan(0);
+    expect(historyRes.body.logs[0].action).toBe('vault_export');
+  });
 });
 
 describe('Audit log flow', () => {
@@ -258,6 +365,30 @@ describe('Vault flow', () => {
     // Verificar que se creó el log de auditoría
     const auditLogs = await prisma.auditLog.findMany({ where: { action: 'vault_view' } });
     expect(auditLogs.length).toBeGreaterThan(0);
+  });
+
+  it('uses per-user cryptographic isolation (userSalt) for vault entries [C-03]', async () => {
+    const userA = await createVerifiedUserAndLogin('usera@empresa.test', 'Password123!');
+    const userB = await createVerifiedUserAndLogin('userb@empresa.test', 'Password123!');
+
+    const dbUserA = await prisma.user.findUnique({ where: { email: 'usera@empresa.test' } });
+    const dbUserB = await prisma.user.findUnique({ where: { email: 'userb@empresa.test' } });
+
+    expect(dbUserA?.userSalt).toBeDefined();
+    expect(dbUserB?.userSalt).toBeDefined();
+    expect(dbUserA?.userSalt).not.toBe(dbUserB?.userSalt);
+
+    const createRes = await request(app)
+      .post('/vault/entries')
+      .set('Authorization', `Bearer ${userA.accessToken}`)
+      .send({ name: 'Secret A', url: 'https://a.test', username: 'usera', password: 'PasswordUserA!' });
+
+    expect(createRes.status).toBe(201);
+    const revealRes = await request(app)
+      .get(`/vault/entries/${createRes.body.item.id}/reveal`)
+      .set('Authorization', `Bearer ${userA.accessToken}`);
+    expect(revealRes.status).toBe(200);
+    expect(revealRes.body.password).toBe('PasswordUserA!');
   });
 
   it('prevents sharing vault entries that you do not own [IDOR fix]', async () => {

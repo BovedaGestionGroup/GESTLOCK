@@ -49,7 +49,7 @@ const registerSchema = z
 
 const loginSchema = z.object({
   email: z.string().email(),
-  password: z.string().min(12),
+  password: z.string().min(1),
 });
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -67,11 +67,10 @@ async function verifyPassword(storedHash: string, password: string) {
 }
 
 // ─── Cifrado de bóveda ────────────────────────────────────────────────────────
-// NOTA: La clave maestra debe configurarse en la variable de entorno VAULT_MASTER_SECRET.
-// En una futura versión (C-03 del plan de hardening) se migrará a clave por usuario.
-
-function deriveEncryptionKey(secret: string) {
-  return scryptSync(secret, 'gestor-salt', 32);
+// [C-03] Derivación dinámica de clave por usuario mediante scryptSync con userSalt
+function deriveEncryptionKey(secret: string, userSalt?: string) {
+  const salt = userSalt || 'gestor-salt';
+  return scryptSync(secret, salt, 32);
 }
 
 function encryptSecret(secret: string, key: Buffer) {

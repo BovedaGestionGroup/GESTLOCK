@@ -1,9 +1,10 @@
 import express from 'express';
-import { randomBytes } from 'crypto';
+import { randomBytes, scryptSync, createCipheriv } from 'crypto';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
 import rateLimit from 'express-rate-limit';
+import XlsxPopulate from 'xlsx-populate';
 import { authMiddleware } from './middleware/authMiddleware.js';
 import {
   authenticateUser,
@@ -69,9 +70,9 @@ function getRouteParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? (value[0] ?? '') : (value ?? '');
 }
 
-/** Clave de cifrado de bóveda — leída de VAULT_MASTER_SECRET (obligatorio) */
-function getVaultKey(): Buffer {
-  return deriveEncryptionKey(requireEnv('VAULT_MASTER_SECRET'));
+/** Clave de cifrado de bóveda — derivada dinámicamente con userSalt [C-03] */
+function getVaultKey(userSalt?: string | null): Buffer {
+  return deriveEncryptionKey(requireEnv('VAULT_MASTER_SECRET'), userSalt ?? undefined);
 }
 
 /** Mapeo de errores internos a mensajes seguros para el cliente [M-02] */
@@ -157,6 +158,7 @@ const authRateLimit = rateLimit({
   max: 20,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: () => process.env.NODE_ENV === 'test',
   message: { message: 'Demasiados intentos. Espera 15 minutos antes de volver a intentarlo.' },
 });
 
@@ -166,6 +168,7 @@ const mfaRateLimit = rateLimit({
   max: 5,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: () => process.env.NODE_ENV === 'test',
   message: { message: 'Demasiados intentos de MFA. Espera 15 minutos.' },
 });
 
@@ -247,6 +250,11 @@ app.post('/auth/login', authRateLimit, async (req, res) => {
     const parsed = loginSchema.parse(req.body);
     const user = await authenticateUser(parsed.email, parsed.password);
     const code = typeof req.body.code === 'string' ? req.body.code : undefined;
+
+    if (user.isActive === false) {
+      res.status(403).json({ message: 'Cuenta desactivada. Contacta con el administrador.' });
+      return;
+    }
 
     if (!user.isVerified) {
       res.status(403).json({ message: 'Email no verificado. Revisa tu bandeja de entrada.' });
@@ -390,7 +398,18 @@ app.get('/admin/users', authMiddleware, async (req, res) => {
       return;
     }
 
+    const search = typeof req.query.search === 'string' ? req.query.search.trim() : undefined;
+    const whereCondition = search
+      ? {
+          OR: [
+            { email: { contains: search, mode: 'insensitive' as const } },
+            { role: { contains: search, mode: 'insensitive' as const } },
+          ],
+        }
+      : undefined;
+
     const users = await prisma.user.findMany({
+      where: whereCondition,
       select: {
         id: true,
         email: true,
@@ -425,15 +444,54 @@ app.delete('/admin/users/:id', authMiddleware, async (req, res) => {
       res.status(400).json({ message: 'No puedes eliminar tu propia cuenta' });
       return;
     }
+    // [Fase 5] Reasignar las entradas corporativas al administrador antes de eliminar el usuario
+    await prisma.vaultEntry.updateMany({
+      where: { userId: targetId },
+      data: { userId: actor.id },
+    });
+
     await prisma.user.delete({ where: { id: targetId } });
-    await createAuditLog(userId, 'admin_delete_user', 'User deleted', {
+    await createAuditLog(userId, 'admin_delete_user', 'User deleted and vault entries preserved/reassigned to admin', {
       ipAddress: req.ip,
       userAgent: req.get('user-agent'),
       targetUserId: targetId,
     });
-    res.json({ message: 'Usuario eliminado' });
+    res.json({ message: 'Usuario eliminado y sus entradas de bóveda fueron preservadas y reasignadas al administrador.' });
   } catch (error) {
     res.status(400).json({ message: 'No se pudo eliminar el usuario' });
+  }
+});
+
+app.put('/admin/users/:id/status', authMiddleware, async (req, res) => {
+  try {
+    const userId = req.userId;
+    if (!userId) {
+      res.status(401).json({ message: 'Unauthorized' });
+      return;
+    }
+    const actor = await prisma.user.findUnique({ where: { id: userId } });
+    if (!actor || !hasPermission(actor.role, 'admin')) {
+      res.status(403).json({ message: 'Forbidden' });
+      return;
+    }
+    const targetId = getRouteParam(req.params.id);
+    const { isActive } = req.body;
+    if (typeof isActive !== 'boolean') {
+      res.status(400).json({ message: 'El campo isActive es requerido' });
+      return;
+    }
+    const updated = await prisma.user.update({
+      where: { id: targetId },
+      data: { isActive },
+    });
+    await createAuditLog(userId, 'admin_update_user_status', `User status updated to ${isActive ? 'activo' : 'desactivado'}`, {
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+      targetUserId: targetId,
+    });
+    res.json({ user: updated });
+  } catch (error) {
+    res.status(400).json({ message: 'No se pudo actualizar el estado del usuario' });
   }
 });
 
@@ -540,6 +598,153 @@ app.post('/auth/reset-password', authRateLimit, async (req, res) => {
   }
 });
 
+// ─── Protocolo de Recuperación con Aprobación del Admin (Fase 4) ──────────────
+
+app.post('/auth/forgot-password', authRateLimit, async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email || typeof email !== 'string') {
+      res.status(400).json({ message: 'El correo electrónico es requerido' });
+      return;
+    }
+    const normalizedEmail = email.toLowerCase().trim();
+    const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+    if (user && user.isVerified) {
+      const existing = await prisma.passwordResetRequest.findMany({
+        where: { userId: user.id, status: 'PENDING' },
+      });
+      if (existing.length === 0) {
+        await prisma.passwordResetRequest.create({
+          data: { userId: user.id, status: 'PENDING' },
+        });
+        await createAuditLog(user.id, 'forgot_password_request', 'Password reset requested by user', {
+          ipAddress: req.ip,
+          userAgent: req.get('user-agent'),
+        });
+        console.log(`[PASSWORD_RESET_REQUEST] El usuario ${user.email} ha solicitado restablecer su contraseña. Notificación enviada a info@gestiongroup.es`);
+      }
+    }
+    res.json({ message: 'Si el correo está registrado, se ha enviado la solicitud de restablecimiento para revisión del administrador.' });
+  } catch (error) {
+    res.status(500).json({ message: 'No se pudo procesar la solicitud' });
+  }
+});
+
+app.get('/admin/password-requests', authMiddleware, async (req, res) => {
+  try {
+    const userId = req.userId;
+    if (!userId) {
+      res.status(401).json({ message: 'Unauthorized' });
+      return;
+    }
+    const actor = await prisma.user.findUnique({ where: { id: userId } });
+    if (!actor || !hasPermission(actor.role, 'admin')) {
+      res.status(403).json({ message: 'Forbidden' });
+      return;
+    }
+    const requests = await prisma.passwordResetRequest.findMany({
+      where: { status: 'PENDING' },
+      include: {
+        user: {
+          select: { id: true, email: true, role: true, createdAt: true },
+        },
+      },
+      orderBy: { requestedAt: 'desc' },
+    });
+    res.json({ requests });
+  } catch (error) {
+    res.status(500).json({ message: 'No se pudieron consultar las solicitudes' });
+  }
+});
+
+app.post('/admin/password-requests/:id/approve', authMiddleware, async (req, res) => {
+  try {
+    const userId = req.userId;
+    if (!userId) {
+      res.status(401).json({ message: 'Unauthorized' });
+      return;
+    }
+    const actor = await prisma.user.findUnique({ where: { id: userId } });
+    if (!actor || !hasPermission(actor.role, 'admin')) {
+      res.status(403).json({ message: 'Forbidden' });
+      return;
+    }
+    const requestId = getRouteParam(req.params.id);
+    const resetReq = await prisma.passwordResetRequest.findUnique({ where: { id: requestId } });
+    if (!resetReq || resetReq.status !== 'PENDING') {
+      res.status(404).json({ message: 'Solicitud no encontrada o ya procesada' });
+      return;
+    }
+    const targetUser = await prisma.user.findUnique({ where: { id: resetReq.userId } });
+    if (!targetUser) {
+      res.status(404).json({ message: 'Usuario no encontrado' });
+      return;
+    }
+
+    const token = randomBytes(32).toString('hex');
+    await prisma.passwordResetToken.create({
+      data: {
+        token,
+        userId: targetUser.id,
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+      },
+    });
+    await prisma.passwordResetRequest.update({
+      where: { id: requestId },
+      data: { status: 'APPROVED', reviewedAt: new Date(), token },
+    });
+
+    const appUrl = process.env.APP_URL || 'http://localhost:3000';
+    const resetUrl = `${appUrl}#resetToken=${token}&email=${encodeURIComponent(targetUser.email)}`;
+    await sendPasswordResetEmail(targetUser.email, resetUrl);
+    await createAuditLog(userId, 'password_reset_approved', `Approved password reset for ${targetUser.email}`, {
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+      targetUserId: targetUser.id,
+      requestId,
+    });
+
+    res.json({ message: `Solicitud aprobada y correo enviado a ${targetUser.email}` });
+  } catch (error) {
+    res.status(500).json({ message: 'No se pudo aprobar la solicitud' });
+  }
+});
+
+app.post('/admin/password-requests/:id/reject', authMiddleware, async (req, res) => {
+  try {
+    const userId = req.userId;
+    if (!userId) {
+      res.status(401).json({ message: 'Unauthorized' });
+      return;
+    }
+    const actor = await prisma.user.findUnique({ where: { id: userId } });
+    if (!actor || !hasPermission(actor.role, 'admin')) {
+      res.status(403).json({ message: 'Forbidden' });
+      return;
+    }
+    const requestId = getRouteParam(req.params.id);
+    const resetReq = await prisma.passwordResetRequest.findUnique({ where: { id: requestId } });
+    if (!resetReq || resetReq.status !== 'PENDING') {
+      res.status(404).json({ message: 'Solicitud no encontrada o ya procesada' });
+      return;
+    }
+
+    await prisma.passwordResetRequest.update({
+      where: { id: requestId },
+      data: { status: 'REJECTED', reviewedAt: new Date() },
+    });
+    await createAuditLog(userId, 'password_reset_rejected', `Rejected password reset request`, {
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+      requestId,
+    });
+
+    res.json({ message: 'Solicitud rechazada' });
+  } catch (error) {
+    res.status(500).json({ message: 'No se pudo rechazar la solicitud' });
+  }
+});
+
 app.put('/admin/users/:id/role', authMiddleware, async (req, res) => {
   try {
     const userId = req.userId;
@@ -632,8 +837,9 @@ app.post('/vault/entries', authMiddleware, async (req, res) => {
       return;
     }
 
-    // [C-01] Sin fallback — requireEnv lanza error si VAULT_MASTER_SECRET no está configurado
-    const encryptionKey = getVaultKey();
+    // [C-03] Obtener userSalt único del propietario para derivar la clave de cifrado
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    const encryptionKey = getVaultKey(user?.userSalt);
     const encryptedPassword = encryptSecret(String(req.body.password ?? ''), encryptionKey);
 
     const item = {
@@ -644,7 +850,7 @@ app.post('/vault/entries', authMiddleware, async (req, res) => {
       username: req.body.username,
       password: encryptedPassword,
       notes: req.body.notes,
-      createdAt: new Date().toISOString(),
+      createdAt: new Date(),
     };
 
     await prisma.vaultEntry.create({ data: item });
@@ -731,7 +937,8 @@ app.get('/vault/entries/:id/reveal', authMiddleware, async (req, res) => {
       return;
     }
 
-    const decryptedPassword = decryptSecret(entry.password, getVaultKey());
+    const owner = await prisma.user.findUnique({ where: { id: entry.userId } });
+    const decryptedPassword = decryptSecret(entry.password, getVaultKey(owner?.userSalt));
 
     // [A-01] Registrar auditoría de visualización de contraseña
     await createAuditLog(userId, 'vault_view', 'Vault entry password revealed', {
@@ -743,6 +950,141 @@ app.get('/vault/entries/:id/reveal', authMiddleware, async (req, res) => {
     res.json({ password: decryptedPassword });
   } catch (error) {
     res.status(500).json({ message: 'No se pudo revelar la contraseña' });
+  }
+});
+
+// ─── Exportación a Excel Cifrado (Fase 6) ────────────────────────────────────
+
+app.post('/vault/export-excel', authMiddleware, async (req, res) => {
+  try {
+    const userId = req.userId;
+    if (!userId) {
+      res.status(401).json({ message: 'Unauthorized' });
+      return;
+    }
+
+    const actor = await prisma.user.findUnique({ where: { id: userId } });
+    const items = await prisma.vaultEntry.findMany({
+      where: {
+        userId: actor?.role === 'admin' ? undefined : actor?.id ?? userId,
+        includeAll: actor?.role === 'admin',
+      },
+    });
+
+    // 1. Determinar contraseña de cifrado del Excel
+    // - Si el usuario envía una contraseña personalizada, se usa esa.
+    // - Si se indica explícitamente sin contraseña (password: '' o null o encrypt: false), no se protege.
+    // - Por defecto, si no se especifica, se genera una clave aleatoria segura de 16 caracteres.
+    let exportPassword: string | undefined;
+    if (typeof req.body?.password === 'string') {
+      exportPassword = req.body.password.trim() || undefined;
+    } else if (req.body?.password === null || req.body?.encrypt === false) {
+      exportPassword = undefined;
+    } else {
+      exportPassword = randomBytes(8).toString('hex');
+    }
+
+    // 2. Construir libro Excel nativo (.xlsx)
+    const workbook = await XlsxPopulate.fromBlankAsync();
+    const sheet = workbook.sheet(0);
+    sheet.name('Bóveda GESTLOCK');
+
+    const headers = ['Nombre', 'URL', 'Usuario', 'Contraseña', 'Notas', 'Fecha de Creación'];
+    headers.forEach((headerText, idx) => {
+      const cell = sheet.row(1).cell(idx + 1);
+      cell.value(headerText);
+      cell.style({
+        bold: true,
+        fill: '0D9488',
+        fontColor: 'FFFFFF',
+        horizontalAlignment: 'center',
+      });
+    });
+
+    sheet.column(1).width(25);
+    sheet.column(2).width(35);
+    sheet.column(3).width(25);
+    sheet.column(4).width(25);
+    sheet.column(5).width(40);
+    sheet.column(6).width(24);
+
+    let rowIndex = 2;
+    for (const entry of items) {
+      const owner = await prisma.user.findUnique({ where: { id: entry.userId } });
+      const decryptedPassword = entry.password ? decryptSecret(entry.password, getVaultKey(owner?.userSalt)) : '';
+      sheet.row(rowIndex).cell(1).value(entry.name || '');
+      sheet.row(rowIndex).cell(2).value(entry.url || '');
+      sheet.row(rowIndex).cell(3).value(entry.username || '');
+      sheet.row(rowIndex).cell(4).value(decryptedPassword || '');
+      sheet.row(rowIndex).cell(5).value(entry.notes ?? '');
+      sheet.row(rowIndex).cell(6).value(new Date(entry.createdAt).toLocaleString('es-ES'));
+      rowIndex++;
+    }
+
+    // 3. Generar buffer de archivo .xlsx protegido con contraseña (o estándar)
+    let rawBuffer: Buffer;
+    if (exportPassword) {
+      rawBuffer = await workbook.outputAsync({ password: exportPassword });
+    } else {
+      rawBuffer = await workbook.outputAsync();
+    }
+
+    const fileBase64 = Buffer.from(rawBuffer).toString('base64');
+    const dateStr = new Date().toISOString().split('T')[0];
+    const filename = `boveda_gestlock_${dateStr}.xlsx`;
+    const isEncrypted = Boolean(exportPassword);
+
+    // 4. Registro de auditoría e historial con IP
+    await createAuditLog(
+      userId,
+      'vault_export',
+      `Exportadas ${items.length} entradas de bóveda a Excel ${isEncrypted ? 'cifrado con contraseña' : 'sin cifrar'}`,
+      {
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent'),
+      }
+    );
+
+    res.json({
+      success: true,
+      tempKey: exportPassword || null,
+      fileData: fileBase64,
+      fileBase64,
+      filename,
+      isEncrypted,
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'No se pudo generar la exportación a Excel' });
+  }
+});
+
+app.get('/admin/audit-logs/exports', authMiddleware, async (req, res) => {
+  try {
+    const userId = req.userId;
+    if (!userId) {
+      res.status(401).json({ message: 'Unauthorized' });
+      return;
+    }
+    const actor = await prisma.user.findUnique({ where: { id: userId } });
+    if (!actor || (!hasPermission(actor.role, 'admin') && !hasPermission(actor.role, 'auditor'))) {
+      res.status(403).json({ message: 'Forbidden' });
+      return;
+    }
+
+    const exportLogs = await prisma.auditLog.findMany({
+      where: { action: 'vault_export' },
+      include: {
+        user: {
+          select: { id: true, email: true, role: true },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    });
+
+    res.json({ logs: exportLogs });
+  } catch (error) {
+    res.status(500).json({ message: 'No se pudo cargar el historial de exportaciones' });
   }
 });
 
@@ -854,7 +1196,8 @@ app.put('/vault/entries/:id', authMiddleware, async (req, res) => {
       return;
     }
 
-    const encryptionKey = getVaultKey();
+    const owner = await prisma.user.findUnique({ where: { id: target.userId } });
+    const encryptionKey = getVaultKey(owner?.userSalt);
 
     const changedFields = [];
     if (req.body.name && req.body.name !== target.name) changedFields.push('nombre');

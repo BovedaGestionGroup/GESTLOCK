@@ -21,8 +21,8 @@ export const prisma = {
       }
       return null;
     },
-    findMany: async ({ select, orderBy }: { select?: any; orderBy?: any }) =>
-      prismaClient.user.findMany({ select, orderBy }),
+    findMany: async ({ select, orderBy, where }: { select?: any; orderBy?: any; where?: any }) =>
+      prismaClient.user.findMany({ select, orderBy, where }),
     create: async ({ data }: { data: { email: string; passwordHash: string; role?: string; mfaEnabled?: boolean; mfaSecret?: string | null; isVerified?: boolean; verificationCode?: string | null } }) =>
       prismaClient.user.create({ data }),
     update: async ({ where, data, select }: { where: { id: string }; data: any; select?: any }) => prismaClient.user.update({ where, data, select }),
@@ -47,6 +47,18 @@ export const prisma = {
       prismaClient.passwordResetToken.create({ data }),
     update: async ({ where, data }: { where: { token: string }; data: any }) =>
       prismaClient.passwordResetToken.update({ where, data }),
+    deleteMany: async () => prismaClient.passwordResetToken.deleteMany(),
+  },
+  passwordResetRequest: {
+    findUnique: async ({ where }: { where: { id?: string; token?: string } }) =>
+      prismaClient.passwordResetRequest.findUnique({ where: where as any }),
+    findMany: async ({ where, include, orderBy }: { where?: any; include?: any; orderBy?: any }) =>
+      prismaClient.passwordResetRequest.findMany({ where, include, orderBy }),
+    create: async ({ data }: { data: { userId: string; status?: string } }) =>
+      prismaClient.passwordResetRequest.create({ data }),
+    update: async ({ where, data }: { where: { id: string }; data: any }) =>
+      prismaClient.passwordResetRequest.update({ where, data }),
+    deleteMany: async () => prismaClient.passwordResetRequest.deleteMany(),
   },
   vaultEntry: {
     create: async ({ data }: { data: any }) => prismaClient.vaultEntry.create({ data }),
@@ -69,10 +81,13 @@ export const prisma = {
     },
     update: async ({ where, data }: { where: { id: string }; data: any }) => prismaClient.vaultEntry.update({ where, data }),
     delete: async ({ where }: { where: { id: string } }) => prismaClient.vaultEntry.delete({ where }),
+    deleteMany: async () => prismaClient.vaultEntry.deleteMany(),
+    updateMany: async ({ where, data }: { where: any; data: any }) => prismaClient.vaultEntry.updateMany({ where, data }),
   },
   vaultEntryShare: {
     findFirst: async ({ where }: { where: { entryId: string; userId: string } }) => prismaClient.vaultEntryShare.findFirst({ where }),
     create: async ({ data }: { data: { entryId: string; userId: string } }) => prismaClient.vaultEntryShare.create({ data }),
+    deleteMany: async () => prismaClient.vaultEntryShare.deleteMany(),
   },
   auditLog: {
     create: async ({ data }: { data: { userId?: string; action: string; details?: string; ipAddress?: string; userAgent?: string } }) =>
